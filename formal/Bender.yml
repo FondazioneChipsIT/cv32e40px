@@ -1,0 +1,11 @@
+package:
+  name: cv32e40px_formal
+
+dependencies:
+  riscv: { path: ../ }
+
+sources:
+  files:
+    - cv32e40px_top_wrap.sv
+  defines:
+    CV32E40P_ASSERT_ON: ~
