@@ -244,6 +244,7 @@ module cv32e40px_top
       ) fp_wrapper_i (
           .clk_i         (apu_clk),
           .rst_ni        (rst_ni),
+          .hart_id_i     (hart_id_i),
           .apu_req_i     (apu_req),
           .apu_gnt_o     (apu_gnt),
           .apu_operands_i(apu_operands),
