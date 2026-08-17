@@ -1,15 +1,16 @@
 module cv32e40px_top_wrap ();
 
-    localparam COREV_X_IF       = 0;
+    localparam COREV_X_IF       = 1;
     localparam COREV_PULP       = 0;
     localparam COREV_CLUSTER    = 0;
-    localparam FPU              = 0;
+    localparam FPU              = 1;
     localparam FPU_ADDMUL_LAT   = 0;
     localparam FPU_OTHERS_LAT   = 0;
     localparam ZFINX            = 0;
     localparam NUM_MHPMCOUNTERS = 1;
 
     import cv32e40px_core_v_xif_pkg::*;
+    import cv32e40px_pkg::*;
     logic  clk_i;
     logic  rst_ni;
     logic  pulp_clock_en_i;
@@ -32,10 +33,10 @@ module cv32e40px_top_wrap ();
     logic [31:0] data_addr_o;
     logic [31:0] data_wdata_o;
     logic [31:0] data_rdata_i;
-    logic  x_compressed_valid_o;
-    logic  x_compressed_ready_i;
-    x_compressed_req_t  x_compressed_req_o;
-    x_compressed_resp_t  x_compressed_resp_i;
+    logic  x_compressed_valid;
+    logic  x_compressed_ready;
+    x_compressed_req_t  x_compressed_req;
+    x_compressed_resp_t  x_compressed_resp;
     logic  x_issue_valid_o;
     logic  x_issue_ready_i;
     x_issue_req_t  x_issue_req_o;
@@ -111,10 +112,10 @@ module cv32e40px_top_wrap ();
         .data_addr_o          (data_addr_o),
         .data_wdata_o         (data_wdata_o),
         .data_rdata_i         (data_rdata_i),
-        .x_compressed_valid_o (x_compressed_valid_o),
-        .x_compressed_ready_i (x_compressed_ready_i),
-        .x_compressed_req_o   (x_compressed_req_o),
-        .x_compressed_resp_i  (x_compressed_resp_i),
+        .x_compressed_valid_o (x_compressed_valid),
+        .x_compressed_ready_i (x_compressed_ready),
+        .x_compressed_req_o   (x_compressed_req),
+        .x_compressed_resp_i  (x_compressed_resp),
         .x_issue_valid_o      (x_issue_valid_o),
         .x_issue_ready_i      (x_issue_ready_i),
         .x_issue_req_o        (x_issue_req_o),
@@ -141,11 +142,85 @@ module cv32e40px_top_wrap ();
         .core_sleep_o         (core_sleep_o)
     );
 
+    generate
+    if (COREV_X_IF) begin: cf_decoder_gen  
+        cf_decoder i_cf_decoder
+        (
+            //.clk_i,
+            //.rst_ni,
+            .x_compressed_valid_i (x_compressed_valid),
+            .x_compressed_req_i   (x_compressed_req),
+            .x_compressed_ready_o (x_compressed_ready),
+            .x_compressed_resp_o  (x_compressed_resp)
+        );
+
+        //bind cv32e40px_top riscv_decoder riscv_decode_XIF (.instruction(cv32e40px_top_inst.x_issue_req_o.instr));
+        vector_pkg::riscv_v_instr_e vec_instruction;
+        bind  cv32e40px_top_wrap vector_decoder rv_v_decode_XIF (.instruction(x_issue_req_o.instr), .rv_instruction(vec_instruction));
+
+        assign x_issue_resp_i.dualwrite = '0;
+        assign x_issue_resp_i.dualread = '0;
+        assign x_issue_resp_i.ecswrite = '0;
+        assign x_issue_resp_i.exc = '0;
+        assign x_issue_ready_i = 1'b1;
+        
+        always_comb begin 
+            if (x_issue_valid_o) begin
+                x_issue_resp_i.accept = vec_instruction != vector_pkg::RV_UNKNOWN;
+
+                case(vec_instruction)
+                vector_pkg::RV_VRGATHER_VI,
+                vector_pkg::RV_VRGATHER_VV,
+                vector_pkg::RV_VRGATHER_VX,
+                vector_pkg::RV_VRGATHEREI16_VV,
+                vector_pkg::RV_VLSE16_V,
+                vector_pkg::RV_VLSE32_V,
+                vector_pkg::RV_VLSE64_V,
+                vector_pkg::RV_VLSE8_V,
+                vector_pkg::RV_VLE16_V,
+                vector_pkg::RV_VLE16FF_V,
+                vector_pkg::RV_VLE32_V,
+                vector_pkg::RV_VLE32FF_V,
+                vector_pkg::RV_VLE64_V,
+                vector_pkg::RV_VLE64FF_V,
+                vector_pkg::RV_VLE8_V,
+                vector_pkg::RV_VLE8FF_V,
+                vector_pkg::RV_VSE16_V,
+                vector_pkg::RV_VSE32_V,
+                vector_pkg::RV_VSE64_V,
+                vector_pkg::RV_VSE8_V,
+                vector_pkg::RV_VSETIVLI,
+                vector_pkg::RV_VSETVL,
+                vector_pkg::RV_VSETVLI,
+                vector_pkg::RV_VSEXT_VF2,
+                vector_pkg::RV_VSEXT_VF4,
+                vector_pkg::RV_VSEXT_VF8,
+                vector_pkg::RV_VLM_V,
+                vector_pkg::RV_VSM_V:   x_issue_resp_i.loadstore = 1'b1;
+                default:                x_issue_resp_i.loadstore = 1'b0;
+                endcase
+            end else begin
+                x_issue_resp_i.accept = 1'b0;
+                x_issue_resp_i.loadstore = 1'b0;
+            end
+        end
+        
+    end else begin
+        assign x_compressed_ready = '0;
+        assign x_compressed_resp  = '0;
+
+        assign x_issue_ready_i = '0;
+        assign x_issue_resp_i = '0;
+    end
+    endgenerate
+
+    assign x_mem_req_i = '0;
+    assign x_mem_valid_i = '0;
 
     logic [7:0] inst_count_d;
     logic [7:0] inst_count_q;
     
-    assign inst_count_d = cv32e40px_top_inst.core_i.mhpmevent_minstret ? (inst_count_q + 1) : inst_count_q; 
+    assign inst_count_d = cv32e40px_top_inst.core_i.id_stage_i.minstret ? (inst_count_q + 1) : inst_count_q; 
     always_ff @(posedge clk_i or negedge rst_ni) begin : inst_count
         if (!rst_ni) begin
             inst_count_q <= '0;
@@ -153,5 +228,38 @@ module cv32e40px_top_wrap ();
             inst_count_q <= inst_count_d;
         end
     end
+
+    logic ret_valid;
+    assign ret_valid = cv32e40px_top_inst.core_i.id_stage_i.minstret;
+    
+    logic is_jal, is_jalr, is_br, is_jump;
+    assign is_jal  = (cv32e40px_top_inst.core_i.id_stage_i.ctrl_transfer_insn_in_id == BRANCH_JAL);
+    assign is_jalr = (cv32e40px_top_inst.core_i.id_stage_i.ctrl_transfer_insn_in_id == BRANCH_JALR);
+    assign is_br   = (cv32e40px_top_inst.core_i.id_stage_i.ctrl_transfer_insn_in_id == BRANCH_COND);
+    assign is_jump = (is_jal || is_jalr || is_br);
+
+    logic is_pc_plus_4;
+    assign is_pc_plus_4 = ret_valid && !is_jump && !cv32e40px_top_inst.core_i.id_stage_i.is_compressed_i;
+
+    logic [31:0] ret_pc_d;
+    logic [31:0] ret_pc_q;
+
+    assign ret_pc_d = ret_valid ? cv32e40px_top_inst.core_i.pc_id : ret_pc_q;  
+
+    always_ff @(posedge clk_i or negedge rst_ni) begin : ret_ff
+       if (!rst_ni) begin 
+           ret_pc_q <= boot_addr_i; 
+       end else begin     
+           ret_pc_q <= ret_pc_d;
+       end
+    end
+
+    a_pc_plus_4:
+    assert property (@(posedge clk_i) disable iff (!rst_ni) 
+        (inst_count_q > 8'd1) && ret_valid && $past(is_pc_plus_4) |-> 
+            cv32e40px_top_inst.core_i.pc_id == (ret_pc_q + 32'd4)); 
+
+    bind cv32e40px_top riscv_decoder riscv_decode_IF (.instruction(cv32e40px_top_inst.core_i.if_stage_i.fetch_rdata));
+    bind cv32e40px_top riscv_decoder riscv_decode_ID (.instruction(cv32e40px_top_inst.core_i.id_stage_i.instr));
 
 endmodule

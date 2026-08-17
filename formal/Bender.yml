@@ -6,6 +6,11 @@ dependencies:
 
 sources:
   files:
+    - riscv_pkg.sv
+    - vector_pkg.sv
+    - riscv_decoder.sv
+    - vector_decoder.sv
+    - cf_decoder.sv
     - cv32e40px_top_wrap.sv
   defines:
     CV32E40P_ASSERT_ON: ~
