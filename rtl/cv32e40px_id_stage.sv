@@ -1120,6 +1120,7 @@ module cv32e40px_id_stage
           // result interface
           .x_result_valid_i(x_result_valid_i),
           .x_result_ready_o(x_result_ready_o),
+          .x_result_id_i   (x_result_i.id),
           .x_result_rd_i   (x_result_i.rd),
           .x_result_we_i   (x_result_i.we),
 
