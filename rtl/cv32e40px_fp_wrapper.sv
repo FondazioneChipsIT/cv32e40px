@@ -62,33 +62,35 @@ module cv32e40px_fp_wrapper
   // FPU Config
   // -----------
   // Features (enabled formats, vectors etc.)
+  // MAGIA: cvfpu pulp-v0.1.3 carries six FP formats (FP8alt) and five operation
+  // groups (SDOTP), so both the format masks and the per-opgroup arrays are one
+  // element wider than in the fpnew release this file was written against. The
+  // shape below matches the CV32E40P wrapper MAGIA already builds against the
+  // same cvfpu revision.
   localparam fpnew_pkg::fpu_features_t FPU_FEATURES = '{
-      Width: C_FLEN,
-      EnableVectors: C_XFVEC,
-      EnableNanBox: 1'b0,
-      FpFmtMask: {
-    C_RVF, C_RVD, C_XF16, C_XF8, C_XF16ALT
-  }, IntFmtMask: {
-    C_XFVEC && C_XF8, C_XFVEC && (C_XF16 || C_XF16ALT), 1'b1, 1'b0
-  }};
+    Width:         C_FLEN,
+    EnableVectors: C_XFVEC,
+    EnableNanBox:  1'b0,
+    FpFmtMask:     {C_RVF, C_RVD, C_XF16, C_XF8, C_XF16ALT, C_XF8ALT},
+    IntFmtMask:    {C_XFVEC && (C_XF8 || C_XF8ALT), C_XFVEC && (C_XF16 || C_XF16ALT), 1'b1, 1'b0}
+  };
 
   // Implementation (number of registers etc)
   localparam fpnew_pkg::fpu_implementation_t FPU_IMPLEMENTATION = '{
-      PipeRegs: '{  // FP32, FP64, FP16, FP8, FP16alt
-      '{
-          FPU_ADDMUL_LAT, C_LAT_FP64, C_LAT_FP16, C_LAT_FP8, C_LAT_FP16ALT
-      },  // ADDMUL
-      '{default: C_LAT_DIVSQRT},  // DIVSQRT
-      '{default: FPU_OTHERS_LAT},  // NONCOMP
-      '{default: FPU_OTHERS_LAT}
-  },  // CONV
-  UnitTypes: '{
-      '{default: fpnew_pkg::MERGED},  // ADDMUL
-      '{default: fpnew_pkg::MERGED},  // DIVSQRT
-      '{default: fpnew_pkg::PARALLEL},  // NONCOMP
-      '{default: fpnew_pkg::MERGED}
-  },  // CONV
-  PipeConfig: fpnew_pkg::AFTER};
+    PipeRegs:  '{// FP32, FP64, FP16, FP8, FP16alt, FP8alt
+                  '{FPU_ADDMUL_LAT, C_LAT_FP64, C_LAT_FP16, C_LAT_FP8, C_LAT_FP16ALT, C_LAT_FP8_ALT
+                  }, // ADDMUL
+                  '{default: C_LAT_DIVSQRT}, // DIVSQRT
+                  '{default: C_LAT_NONCOMP}, // NONCOMP
+                  '{default: C_LAT_CONV},    // CONV
+                  '{default: C_LAT_DOTP}},   // SDOTP
+    UnitTypes: '{'{default: fpnew_pkg::MERGED},   // ADDMUL
+                  '{default: fpnew_pkg::MERGED},   // DIVSQRT
+                  '{default: fpnew_pkg::PARALLEL}, // NONCOMP
+                  '{default: fpnew_pkg::MERGED},   // CONV
+                  '{default: fpnew_pkg::DISABLED}},// SDOTP
+    PipeConfig: fpnew_pkg::AFTER
+  };
 
   //---------------
   // FPU instance
@@ -97,11 +99,11 @@ module cv32e40px_fp_wrapper
   fpnew_top #(
       .Features      (FPU_FEATURES),
       .Implementation(FPU_IMPLEMENTATION),
-      .PulpDivsqrt   (1'b0),
       .TagType       (logic)
   ) i_fpnew_bulk (
       .clk_i         (clk_i),
       .rst_ni        (rst_ni),
+      .hart_id_i     ('0),
       .operands_i    (apu_operands_i),
       .rnd_mode_i    (fpnew_pkg::roundmode_e'(fp_rnd_mode)),
       .op_i          (fpnew_pkg::operation_e'(fpu_op)),
@@ -111,7 +113,7 @@ module cv32e40px_fp_wrapper
       .int_fmt_i     (fpnew_pkg::int_format_e'(fpu_int_fmt)),
       .vectorial_op_i(fpu_vec_op),
       .tag_i         (1'b0),
-      .simd_mask_i   (1'b0),
+      .simd_mask_i   ('0),
       .in_valid_i    (apu_req_i),
       .in_ready_o    (apu_gnt_o),
       .flush_i       (1'b0),
