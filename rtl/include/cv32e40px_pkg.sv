@@ -768,12 +768,16 @@ package cv32e40px_pkg;
   parameter bit C_RVD = 1'b0;  // Is D extension enabled - NOT SUPPORTED CURRENTLY
 
   // Transprecision floating-point extensions configuration.
-  // MAGIA: kept identical to the CV32E40P cluster cores these replace, so the
-  // transprecision/SIMD FP ISA the cluster software uses stays available.
-  parameter bit C_XF16 = 1'b1;  // Is half-precision float extension (Xf16) enabled
-  parameter bit C_XF16ALT = 1'b1; // Is alternative half-precision float extension (Xf16alt) enabled
-  parameter bit C_XF8 = 1'b1;  // Is quarter-precision float extension (Xf8) enabled
-  parameter bit C_XFVEC = 1'b1;  // Is vectorial float extension (Xfvec) enabled
+  // Disabled, matching the spatz_cv32 reference config. On a core paired with a
+  // Spatz VFU over the eXtension Interface these steal encodings the vector unit
+  // needs: scalar Xf8 load/store (funct3 000) is the exact encoding of the RVV
+  // unit-stride vle8.v / vse8.v, so with C_XF8 = 1 the core would decode those
+  // as legal scalar FP byte accesses and never offload them. All half / quarter
+  // precision and packed-SIMD FP work runs on Spatz; the scalar core keeps F.
+  parameter bit C_XF16 = 1'b0;  // Is half-precision float extension (Xf16) enabled
+  parameter bit C_XF16ALT = 1'b0; // Is alternative half-precision float extension (Xf16alt) enabled
+  parameter bit C_XF8 = 1'b0;  // Is quarter-precision float extension (Xf8) enabled
+  parameter bit C_XFVEC = 1'b0;  // Is vectorial float extension (Xfvec) enabled
   parameter bit C_XF8ALT = 1'b0;  // Is alternative quarter-precision float extension (Xf8alt) enabled
 
   // Latency of FP operations: 0 = no pipe registers, 1 = 1 pipe register etc.
