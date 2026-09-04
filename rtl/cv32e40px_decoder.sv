@@ -1567,6 +1567,21 @@ module cv32e40px_decoder
                      else illegal_insn_o = 1'b1;
             default: illegal_insn_o = 1'b1;
           endcase
+
+          // Sanitize the memory bus and write-back signals for an illegal
+          // instruction, mirroring OPCODE_STORE_FP. Without this the core
+          // starts a load and an FP register write-back for any encoding in
+          // this opcode class it does not implement. That used to be harmless
+          // because an illegal instruction always trapped and deassert_we_i
+          // cleaned up, but with COREV_X_IF an illegal instruction is instead
+          // offloaded over the eXtension Interface: nothing deasserts, so an
+          // offloaded RVV unit-stride load (same opcode, funct3 the core does
+          // not decode) also performed a stray scalar load at rs1 + imm and
+          // wrote its result into the FP register file.
+          if (illegal_insn_o) begin
+            data_req       = 1'b0;
+            regfile_mem_we = 1'b0;
+          end
         // No FPU or ZFINX or MSTATUS.FS == FS_OFF
         end else begin
           illegal_insn_o = 1'b1;
