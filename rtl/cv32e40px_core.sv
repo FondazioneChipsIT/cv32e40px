@@ -264,6 +264,7 @@ module cv32e40px_core
   // X-Interface
   logic        [                 3:0]       x_compressed_id;
   logic                                     x_result_valid_assigned;
+  logic                                     x_result_rd_is_fp;
   logic                                     x_mem_instr;
   logic        [                 3:0]       x_mem_id_ex;
   logic                                     x_mem_instr_wb;
@@ -721,6 +722,7 @@ module cv32e40px_core
       .x_result_ready_o(x_result_ready_o),
       .x_result_i(x_result_i),
       .x_result_valid_assigned_o(x_result_valid_assigned),
+      .x_result_rd_is_fp_o      (x_result_rd_is_fp),
 
       .x_mem_instr_ex_o(x_mem_instr),
       .x_mem_id_ex_o   (x_mem_id_ex),
@@ -926,6 +928,7 @@ module cv32e40px_core
       // X-Interface
       .x_result_valid_assigned_i(x_result_valid_assigned),
       .x_result_rd_i            (x_result_i.rd),
+      .x_result_rd_is_fp_i      (x_result_rd_is_fp),
       .x_result_data_i          (x_result_i.data),
       .x_result_we_i            (x_result_i.we),
       .x_mem_instr_i            (x_mem_instr),

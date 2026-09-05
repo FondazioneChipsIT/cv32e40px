@@ -66,6 +66,11 @@ module cv32e40px_x_disp
     input  logic [X_ID_WIDTH-1:0] x_result_id_i,
     input  logic [4:0] x_result_rd_i,
     input  logic       x_result_we_i,
+    // The result channel carries a bare 5-bit rd, so it cannot say which
+    // register file the write lands in. Remember that per offloaded id here
+    // and report it back when the result returns (see pending_fp_rd_q).
+    input  logic       offload_rd_is_fp_i,
+    output logic       x_result_rd_is_fp_o,
 
     // scoreboard, dependency check, stall, forwarding
     input  logic [              4:0]      waddr_id_i,
@@ -110,6 +115,8 @@ module cv32e40px_x_disp
   // register. Spatz keeps vector instructions in flight for tens of cycles, so
   // the 16 ids wrap well before the results return.
   logic [(1<<X_ID_WIDTH)-1:0] pending_q, pending_d;
+  // Destination register file of each offloaded id: 1 = FP, 0 = integer.
+  logic [(1<<X_ID_WIDTH)-1:0] pending_fp_rd_q, pending_fp_rd_d;
   logic instr_offloaded_q, instr_offloaded_d;
   logic [3:0] mem_counter_q, mem_counter_d;
   logic dep;
@@ -272,6 +279,7 @@ module cv32e40px_x_disp
       instr_offloaded_q <= 1'b0;
       id_q              <= '0;
       pending_q         <= '0;
+      pending_fp_rd_q   <= '0;
       mem_counter_q     <= '0;
       x_illegal_insn_q  <= 1'b0;
     end else begin
@@ -279,6 +287,7 @@ module cv32e40px_x_disp
       instr_offloaded_q <= instr_offloaded_d;
       id_q              <= id_d;
       pending_q         <= pending_d;
+      pending_fp_rd_q   <= pending_fp_rd_d;
       mem_counter_q     <= mem_counter_d;
       if (x_control_illegal_reset_i) begin
         x_illegal_insn_q <= 1'b0;
@@ -300,11 +309,17 @@ module cv32e40px_x_disp
 
   // Track which eXtension Interface ids still have a result outstanding.
   always_comb begin : pending_instruction_ids
-    pending_d = pending_q;
+    pending_d       = pending_q;
+    pending_fp_rd_d = pending_fp_rd_q;
 
-    if (x_issue_valid_o & x_issue_ready_i) pending_d[id_q] = 1'b1;
+    if (x_issue_valid_o & x_issue_ready_i) begin
+      pending_d[id_q]       = 1'b1;
+      pending_fp_rd_d[id_q] = offload_rd_is_fp_i;
+    end
 
     if (x_result_valid_i & x_result_ready_o) pending_d[x_result_id_i] = 1'b0;
   end
+
+  assign x_result_rd_is_fp_o = pending_fp_rd_q[x_result_id_i];
 
 endmodule : cv32e40px_x_disp

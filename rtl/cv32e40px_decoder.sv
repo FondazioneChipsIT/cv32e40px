@@ -2998,6 +2998,24 @@ module cv32e40px_decoder
 
         end
       end
+      OPCODE_OP_V: begin
+        // RVV arithmetic. This core implements none of it, so the instruction
+        // stays illegal and cv32e40px_x_disp offloads it over the eXtension
+        // Interface. The OPFVF form (funct3 = 101) reads its scalar operand
+        // from an *FP* register though - vfmacc.vf, vfmul.vf, vfadd.vf, ... -
+        // and the XIF can only carry what the operand fetch happens to read.
+        // regfile_addr_ra_id is {reg_fp_a, rs1} and that read is unconditional,
+        // so pointing it at the FP register file is all it takes for
+        // x_issue_req.rs[0] to carry f[rs1]. Without this every .vf offload
+        // silently hands the accelerator x[rs1] instead.
+        illegal_insn_o = 1'b1;
+        if (FPU == 1 && instr_rdata_i[14:12] == 3'b101) begin
+          // rega_used_o additionally makes the scoreboard wait for a pending
+          // write of that FP register, so a `flh` feeding a `.vf` is ordered.
+          rega_used_o = 1'b1;
+          reg_fp_a_o  = 1'b1;
+        end
+      end
       default: illegal_insn_o = 1'b1;
     endcase
 

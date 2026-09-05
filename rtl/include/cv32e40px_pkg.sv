@@ -46,6 +46,7 @@ package cv32e40px_pkg;
   parameter OPCODE_AUIPC = 7'h17;
   parameter OPCODE_LUI = 7'h37;
   parameter OPCODE_OP_FP = 7'h53;
+  parameter OPCODE_OP_V = 7'h57;
   parameter OPCODE_OP_FMADD = 7'h43;
   parameter OPCODE_OP_FNMADD = 7'h4f;
   parameter OPCODE_OP_FMSUB = 7'h47;

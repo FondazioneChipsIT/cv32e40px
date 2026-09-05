@@ -194,6 +194,8 @@ module cv32e40px_id_stage
     output logic x_result_ready_o,
     input x_result_t x_result_i,
     output logic x_result_valid_assigned_o,
+    // Which register file the returning XIF result writes: 1 = FP, 0 = integer.
+    output logic x_result_rd_is_fp_o,
 
     // CSR ID/EX
     output logic              csr_access_ex_o,
@@ -379,6 +381,7 @@ module cv32e40px_id_stage
   logic [ 5:0] regfile_addr_rc_id;
 
   logic        regfile_fp_a;
+  logic        offload_rd_is_fp;
   logic        regfile_fp_b;
   logic        regfile_fp_c;
   logic        regfile_fp_d;
@@ -1123,6 +1126,8 @@ module cv32e40px_id_stage
           .x_result_id_i   (x_result_i.id),
           .x_result_rd_i   (x_result_i.rd),
           .x_result_we_i   (x_result_i.we),
+          .offload_rd_is_fp_i (offload_rd_is_fp),
+          .x_result_rd_is_fp_o(x_result_rd_is_fp_o),
 
           // scoreboard, dependency check, stall, forwarding
           .waddr_id_i          (waddr_id),
@@ -1161,6 +1166,14 @@ module cv32e40px_id_stage
       assign illegal_insn = x_illegal_insn;
 
       // x-dispatcher signal assignments
+      // vfmv.f.s (OP-V, OPFVV funct3 = 001, funct6 = 010000) is the one RVV
+      // instruction that retires into an *FP* register. Everything else the
+      // accelerator writes back - vsetvli, vmv.x.s, vcpop, ... - targets the
+      // integer file. The result channel only carries a 5-bit rd, so latch the
+      // distinction per id in the dispatcher and steer the writeback with it.
+      assign offload_rd_is_fp = (FPU == 1) & (instr[6:0] == OPCODE_OP_V)
+                                & (instr[14:12] == 3'b001) & (instr[31:26] == 6'b010000);
+
       assign x_issue_req_o.instr = instr;
       assign x_issue_req_o.ecs = '0;
       assign x_rs_addr[0] = regfile_addr_ra_id[4:0];
@@ -1212,6 +1225,8 @@ module cv32e40px_id_stage
       // default assignment for x-interface control signals
       assign x_stall                   = 1'b0;
       assign x_result_valid_assigned_o = 1'b0;
+      assign x_result_rd_is_fp_o       = 1'b0;
+      assign offload_rd_is_fp          = 1'b0;
       assign x_mem_valid               = 1'b0;
       assign x_mem_data_req            = '0;
       assign x_mem_data_type_id        = '0;
