@@ -52,7 +52,25 @@ module cv32e40px_fp_wrapper
 
 
   // assign apu_rID_o = '0;
-  assign {fpu_vec_op, fpu_op_mod, fpu_op}                     = apu_op_i;
+
+  // The core encodes the operation with its own, narrower enum:
+  // cv32e40px_fpu_pkg::OP_BITS is 4 (FMADD..CPKCD), while this FPnew adds the
+  // DOTP group and uses 5. APU_WOP_CPU is 6, sized for the core's {vec_op,
+  // op_mod, op[3:0]}, so unpacking it straight into a 5-bit fpu_op made a 7-bit
+  // target of a 6-bit source: every field shifted by one. op_mod landed in the
+  // op's MSB and vec_op in op_mod, so every operation that sets the modifier was
+  // sent as a different instruction - fmsub.s (FMADD + mod) arrived as EXVSUM,
+  // an op from a group this configuration does not instantiate, which accepted
+  // the request and never answered it. The core then waited on the APU forever.
+  //
+  // Unpack with the core's width and widen afterwards. The first fifteen
+  // operations of the two enums are declared in the same order, so this is a
+  // plain zero-extension; the DOTP operations beyond them have no encoding in
+  // CV32E40Px and are simply not reachable from here.
+  logic [cv32e40px_fpu_pkg::OP_BITS-1:0] fpu_op_core;
+
+  assign {fpu_vec_op, fpu_op_mod, fpu_op_core}                = apu_op_i;
+  assign fpu_op                                               = fpnew_pkg::OP_BITS'(fpu_op_core);
 
   assign {fpu_int_fmt, fpu_src_fmt, fpu_dst_fmt, fp_rnd_mode} = apu_flags_i;
 
@@ -124,6 +142,8 @@ module cv32e40px_fp_wrapper
       .out_ready_i   (1'b1),
       .busy_o        (  /* unused */)
   );
+
+
 
 endmodule  // cv32e40px_fp_wrapper
 
