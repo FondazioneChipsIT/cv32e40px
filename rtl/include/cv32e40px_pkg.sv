@@ -768,16 +768,23 @@ package cv32e40px_pkg;
   parameter bit C_RVD = 1'b0;  // Is D extension enabled - NOT SUPPORTED CURRENTLY
 
   // Transprecision floating-point extensions configuration.
-  // Disabled, matching the spatz_cv32 reference config. On a core paired with a
-  // Spatz VFU over the eXtension Interface these steal encodings the vector unit
-  // needs: scalar Xf8 load/store (funct3 000) is the exact encoding of the RVV
-  // unit-stride vle8.v / vse8.v, so with C_XF8 = 1 the core would decode those
-  // as legal scalar FP byte accesses and never offload them. All half / quarter
-  // precision and packed-SIMD FP work runs on Spatz; the scalar core keeps F.
-  parameter bit C_XF16 = 1'b0;  // Is half-precision float extension (Xf16) enabled
-  parameter bit C_XF16ALT = 1'b0; // Is alternative half-precision float extension (Xf16alt) enabled
-  parameter bit C_XF8 = 1'b0;  // Is quarter-precision float extension (Xf8) enabled
-  parameter bit C_XFVEC = 1'b0;  // Is vectorial float extension (Xfvec) enabled
+  //
+  // Only Xf8 has to go when the core is paired with a Spatz VFU over the
+  // eXtension Interface. RVV reuses the LOAD-FP / STORE-FP major opcodes and
+  // disambiguates on funct3 (the `width` field): the vector widths are 000, 101,
+  // 110, 111 while scalar FP uses 001 (h), 010 (w), 011 (d). Only width 000
+  // clashes - it is `vle8.v` / `vse8.v` for RVV and the non-standard `flb` /
+  // `fsb` for Xf8 - so with C_XF8 = 1 the core decodes the 8-bit vector accesses
+  // as legal scalar FP byte accesses and never offloads them.
+  //
+  // Xf16 does NOT clash (flh is width 001, vle16.v is 101) and stays enabled:
+  // the Spatz benchmark kernels feed their vector ops from scalar FP16 - `flh`
+  // for gemv_v16b_m4, `fmv.h.x` / `vfmv.f.s` for the axpy and dotp reductions -
+  // so turning it off makes those kernels trap on the scalar half.
+  parameter bit C_XF16 = 1'b1;  // Is half-precision float extension (Xf16) enabled
+  parameter bit C_XF16ALT = 1'b1; // Is alternative half-precision float extension (Xf16alt) enabled
+  parameter bit C_XF8 = 1'b0;  // Is quarter-precision float extension (Xf8) enabled - clashes with vle8.v/vse8.v
+  parameter bit C_XFVEC = 1'b1;  // Is vectorial float extension (Xfvec) enabled
   parameter bit C_XF8ALT = 1'b0;  // Is alternative quarter-precision float extension (Xf8alt) enabled
 
   // Latency of FP operations: 0 = no pipe registers, 1 = 1 pipe register etc.
