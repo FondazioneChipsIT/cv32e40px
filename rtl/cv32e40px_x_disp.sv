@@ -71,19 +71,30 @@ module cv32e40px_x_disp
     // and report it back when the result returns (see pending_fp_rd_q).
     input  logic       offload_rd_is_fp_i,
     output logic       x_result_rd_is_fp_o,
+    // The FP source of an offloaded OPFVF is written by the APU, and while that
+    // write is inside the APU there is no pipeline signal here that names it -
+    // not waddr_ex, not waddr_wb. The core's own APU dependency check does see
+    // it, so take the answer from there rather than inventing a second one.
+    input  logic       offload_fs1_dep_i,
 
     // scoreboard, dependency check, stall, forwarding
-    input  logic [              4:0]      waddr_id_i,
-    input  logic [              4:0]      waddr_ex_i,
-    input  logic [              4:0]      waddr_wb_i,
+    // Register addresses are six bits, not five: bit 5 selects the FP register
+    // file. Comparing only the low five made f<n> alias x<n>, so an offloaded
+    // instruction reading f15 matched an in-flight integer write to x15 - and,
+    // the way it actually bit, an `fmv.w.x fa5` still in EX forwarded its result
+    // to a `vfmv.v.f v4, fa5` that should have waited for it, broadcasting a
+    // stale value. Keep the file bit in every comparison.
+    input  logic [              5:0]      waddr_id_i,
+    input  logic [              5:0]      waddr_ex_i,
+    input  logic [              5:0]      waddr_wb_i,
     input  logic                          we_ex_i,
     input  logic                          we_wb_i,
-    input  logic [              4:0]      mem_instr_waddr_ex_i,
+    input  logic [              5:0]      mem_instr_waddr_ex_i,
     input  logic                          mem_instr_we_ex_i,
     input  logic [              2:0]      regs_used_i,
     input  logic                          branch_or_jump_i,
     input  logic                          instr_valid_i,
-    input  logic [              2:0][4:0] x_rs_addr_i,
+    input  logic [              2:0][5:0] x_rs_addr_i,
     output logic [RF_READ_PORTS-1:0]      x_ex_fwd_o,
     output logic [RF_READ_PORTS-1:0]      x_wb_fwd_o,
 
@@ -105,7 +116,9 @@ module cv32e40px_x_disp
 );
 
   // scoreboard, id and satus signals
-  logic [31:0] scoreboard_q, scoreboard_d;
+  logic [63:0] scoreboard_q, scoreboard_d;
+  logic [5:0]  x_result_waddr;
+  logic        x_result_writes;
   logic [3:0] id_q, id_d;
   // One bit per eXtension Interface transaction id: set when an instruction is
   // offloaded with that id, cleared when its result comes back. id_q is a free
@@ -133,25 +146,39 @@ module cv32e40px_x_disp
   generate
     if (X_DUALREAD != 0) begin : gen_rs_dualread
       assign x_issue_req_rs_valid_o[0] = (~scoreboard_q[x_rs_addr_i[0]] | x_ex_fwd_o[0] | x_wb_fwd_o[0])
-                                         & ~(x_rs_addr_i[0] == mem_instr_waddr_ex_i & mem_instr_we_ex_i) & ~(x_rs_addr_i[0] == waddr_wb_i & ~ex_valid_i);
+                                         & ~(x_rs_addr_i[0] == mem_instr_waddr_ex_i & mem_instr_we_ex_i) & ~(x_rs_addr_i[0] == waddr_wb_i & ~ex_valid_i)
+                                         & ~(x_rs_addr_i[0] == waddr_ex_i & we_ex_i & ~ex_valid_i)
+                                         & ~offload_fs1_dep_i;
       assign x_issue_req_rs_valid_o[1] = (~scoreboard_q[x_rs_addr_i[1]] | x_ex_fwd_o[1] | x_wb_fwd_o[1])
-                                         & ~(x_rs_addr_i[1] == mem_instr_waddr_ex_i & mem_instr_we_ex_i) & ~(x_rs_addr_i[1] == waddr_wb_i & ~ex_valid_i);
+                                         & ~(x_rs_addr_i[1] == mem_instr_waddr_ex_i & mem_instr_we_ex_i) & ~(x_rs_addr_i[1] == waddr_wb_i & ~ex_valid_i)
+                                         & ~(x_rs_addr_i[1] == waddr_ex_i & we_ex_i & ~ex_valid_i);
       assign x_issue_req_rs_valid_o[2] = (~scoreboard_q[x_rs_addr_i[2]] | x_ex_fwd_o[2] | x_wb_fwd_o[2])
-                                         & ~(x_rs_addr_i[2] == mem_instr_waddr_ex_i & mem_instr_we_ex_i) & ~(x_rs_addr_i[2] == waddr_wb_i & ~ex_valid_i);
-      assign x_issue_req_rs_valid_o[3] = (~scoreboard_q[x_rs_addr_i[0] | 5'b00001] | x_ex_fwd_o[3] | x_wb_fwd_o[3])
-                                         & ~((x_rs_addr_i[0] | 5'b00001) == mem_instr_waddr_ex_i & mem_instr_we_ex_i) & ~((x_rs_addr_i[0] | 5'b00001) == waddr_wb_i & ~ex_valid_i);
-      assign x_issue_req_rs_valid_o[4] = (~scoreboard_q[x_rs_addr_i[1] | 5'b00001] | x_ex_fwd_o[4] | x_wb_fwd_o[4])
-                                         & ~((x_rs_addr_i[1] | 5'b00001) == mem_instr_waddr_ex_i & mem_instr_we_ex_i) & ~((x_rs_addr_i[1] | 5'b00001) == waddr_wb_i & ~ex_valid_i);
-      assign x_issue_req_rs_valid_o[5] = (~scoreboard_q[x_rs_addr_i[2] | 5'b00001] | x_ex_fwd_o[5] | x_wb_fwd_o[5])
-                                         & ~((x_rs_addr_i[2] | 5'b00001) == mem_instr_waddr_ex_i & mem_instr_we_ex_i) & ~((x_rs_addr_i[2] | 5'b00001) == waddr_wb_i & ~ex_valid_i);
+                                         & ~(x_rs_addr_i[2] == mem_instr_waddr_ex_i & mem_instr_we_ex_i) & ~(x_rs_addr_i[2] == waddr_wb_i & ~ex_valid_i)
+                                         & ~(x_rs_addr_i[2] == waddr_ex_i & we_ex_i & ~ex_valid_i);
+      assign x_issue_req_rs_valid_o[3] = (~scoreboard_q[x_rs_addr_i[0] | 6'b000001] | x_ex_fwd_o[3] | x_wb_fwd_o[3])
+                                         & ~((x_rs_addr_i[0] | 6'b000001) == mem_instr_waddr_ex_i & mem_instr_we_ex_i) & ~((x_rs_addr_i[0] | 6'b000001) == waddr_wb_i & ~ex_valid_i);
+      assign x_issue_req_rs_valid_o[4] = (~scoreboard_q[x_rs_addr_i[1] | 6'b000001] | x_ex_fwd_o[4] | x_wb_fwd_o[4])
+                                         & ~((x_rs_addr_i[1] | 6'b000001) == mem_instr_waddr_ex_i & mem_instr_we_ex_i) & ~((x_rs_addr_i[1] | 6'b000001) == waddr_wb_i & ~ex_valid_i);
+      assign x_issue_req_rs_valid_o[5] = (~scoreboard_q[x_rs_addr_i[2] | 6'b000001] | x_ex_fwd_o[5] | x_wb_fwd_o[5])
+                                         & ~((x_rs_addr_i[2] | 6'b000001) == mem_instr_waddr_ex_i & mem_instr_we_ex_i) & ~((x_rs_addr_i[2] | 6'b000001) == waddr_wb_i & ~ex_valid_i);
       assign x_issue_req_ecs_valid = 1'b1;  // extension context status is not implemented in cv32e40px
     end else begin : gen_rs_no_dualread
+      // The three terms after the scoreboard are the writes in flight that the
+      // offload has to wait for: a load in EX, a writeback that has not landed,
+      // and - this one - an EX-stage result that is not forwardable yet.
+      // Without the last, an `fmv.w.x fa5` still in the APU let the `vfmv.v.f
+      // v4, fa5` behind it issue with whatever f15 held before, and the vector
+      // unit broadcast a stale scalar.
       assign x_issue_req_rs_valid_o[0] = (~scoreboard_q[x_rs_addr_i[0]] | x_ex_fwd_o[0] | x_wb_fwd_o[0])
-                                         & ~(x_rs_addr_i[0] == mem_instr_waddr_ex_i & mem_instr_we_ex_i) & ~(x_rs_addr_i[0] == waddr_wb_i & ~ex_valid_i);
+                                         & ~(x_rs_addr_i[0] == mem_instr_waddr_ex_i & mem_instr_we_ex_i) & ~(x_rs_addr_i[0] == waddr_wb_i & ~ex_valid_i)
+                                         & ~(x_rs_addr_i[0] == waddr_ex_i & we_ex_i & ~ex_valid_i)
+                                         & ~offload_fs1_dep_i;
       assign x_issue_req_rs_valid_o[1] = (~scoreboard_q[x_rs_addr_i[1]] | x_ex_fwd_o[1] | x_wb_fwd_o[1])
-                                         & ~(x_rs_addr_i[1] == mem_instr_waddr_ex_i & mem_instr_we_ex_i) & ~(x_rs_addr_i[1] == waddr_wb_i & ~ex_valid_i);
+                                         & ~(x_rs_addr_i[1] == mem_instr_waddr_ex_i & mem_instr_we_ex_i) & ~(x_rs_addr_i[1] == waddr_wb_i & ~ex_valid_i)
+                                         & ~(x_rs_addr_i[1] == waddr_ex_i & we_ex_i & ~ex_valid_i);
       assign x_issue_req_rs_valid_o[2] = (~scoreboard_q[x_rs_addr_i[2]] | x_ex_fwd_o[2] | x_wb_fwd_o[2])
-                                         & ~(x_rs_addr_i[2] == mem_instr_waddr_ex_i & mem_instr_we_ex_i) & ~(x_rs_addr_i[2] == waddr_wb_i & ~ex_valid_i);
+                                         & ~(x_rs_addr_i[2] == mem_instr_waddr_ex_i & mem_instr_we_ex_i) & ~(x_rs_addr_i[2] == waddr_wb_i & ~ex_valid_i)
+                                         & ~(x_rs_addr_i[2] == waddr_ex_i & we_ex_i & ~ex_valid_i);
       assign x_issue_req_ecs_valid = 1'b1;  // extension context status is not implemented in cv32e40px
     end
   endgenerate
@@ -191,21 +218,21 @@ module cv32e40px_x_disp
       assign x_ex_fwd_o[0] = x_rs_addr_i[0] == waddr_ex_i & we_ex_i & ex_valid_i;
       assign x_ex_fwd_o[1] = x_rs_addr_i[1] == waddr_ex_i & we_ex_i & ex_valid_i;
       assign x_ex_fwd_o[2] = x_rs_addr_i[2] == waddr_ex_i & we_ex_i & ex_valid_i;
-      assign x_ex_fwd_o[3] = (x_rs_addr_i[0] | 5'b00001) == waddr_ex_i & we_ex_i & ex_valid_i & x_issue_resp_dualread_i[0];
-      assign x_ex_fwd_o[4] = (x_rs_addr_i[1] | 5'b00001) == waddr_ex_i & we_ex_i & ex_valid_i & x_issue_resp_dualread_i[1];
-      assign x_ex_fwd_o[5] = (x_rs_addr_i[2] | 5'b00001) == waddr_ex_i & we_ex_i & ex_valid_i & x_issue_resp_dualread_i[2];
+      assign x_ex_fwd_o[3] = (x_rs_addr_i[0] | 6'b000001) == waddr_ex_i & we_ex_i & ex_valid_i & x_issue_resp_dualread_i[0];
+      assign x_ex_fwd_o[4] = (x_rs_addr_i[1] | 6'b000001) == waddr_ex_i & we_ex_i & ex_valid_i & x_issue_resp_dualread_i[1];
+      assign x_ex_fwd_o[5] = (x_rs_addr_i[2] | 6'b000001) == waddr_ex_i & we_ex_i & ex_valid_i & x_issue_resp_dualread_i[2];
       assign x_wb_fwd_o[0] = x_rs_addr_i[0] == waddr_wb_i & we_wb_i & ex_valid_i;
       assign x_wb_fwd_o[1] = x_rs_addr_i[1] == waddr_wb_i & we_wb_i & ex_valid_i;
       assign x_wb_fwd_o[2] = x_rs_addr_i[2] == waddr_wb_i & we_wb_i & ex_valid_i;
-      assign x_wb_fwd_o[3] = (x_rs_addr_i[0] | 5'b00001) == waddr_wb_i & we_wb_i & ex_valid_i & x_issue_resp_dualread_i[0];
-      assign x_wb_fwd_o[4] = (x_rs_addr_i[1] | 5'b00001) == waddr_wb_i & we_wb_i & ex_valid_i & x_issue_resp_dualread_i[1];
-      assign x_wb_fwd_o[5] = (x_rs_addr_i[2] | 5'b00001) == waddr_wb_i & we_wb_i & ex_valid_i & x_issue_resp_dualread_i[2];
+      assign x_wb_fwd_o[3] = (x_rs_addr_i[0] | 6'b000001) == waddr_wb_i & we_wb_i & ex_valid_i & x_issue_resp_dualread_i[0];
+      assign x_wb_fwd_o[4] = (x_rs_addr_i[1] | 6'b000001) == waddr_wb_i & we_wb_i & ex_valid_i & x_issue_resp_dualread_i[1];
+      assign x_wb_fwd_o[5] = (x_rs_addr_i[2] | 6'b000001) == waddr_wb_i & we_wb_i & ex_valid_i & x_issue_resp_dualread_i[2];
       assign dep = ~x_illegal_insn_n & ((regs_used_i[0] & scoreboard_q[x_rs_addr_i[0]] & (x_result_rd_i != x_rs_addr_i[0]))
                                   |     (regs_used_i[1] & scoreboard_q[x_rs_addr_i[1]] & (x_result_rd_i != x_rs_addr_i[1]))
                                   |     (regs_used_i[2] & scoreboard_q[x_rs_addr_i[2]] & (x_result_rd_i != x_rs_addr_i[2]))
-                                  |     (((regs_used_i[0] & x_issue_resp_dualread_i[0]) & scoreboard_q[x_rs_addr_i[0] | 5'b00001] & (x_result_rd_i != (x_rs_addr_i[0] | 5'b00001))) & x_issue_resp_dualread_i[0])
-                                  |     (((regs_used_i[1] & x_issue_resp_dualread_i[1]) & scoreboard_q[x_rs_addr_i[1] | 5'b00001] & (x_result_rd_i != (x_rs_addr_i[1] | 5'b00001))) & x_issue_resp_dualread_i[1])
-                                  |     (((regs_used_i[2] & x_issue_resp_dualread_i[2]) & scoreboard_q[x_rs_addr_i[2] | 5'b00001] & (x_result_rd_i != (x_rs_addr_i[2] | 5'b00001))) & x_issue_resp_dualread_i[2]));
+                                  |     (((regs_used_i[0] & x_issue_resp_dualread_i[0]) & scoreboard_q[x_rs_addr_i[0] | 6'b000001] & (x_result_rd_i != (x_rs_addr_i[0] | 6'b000001))) & x_issue_resp_dualread_i[0])
+                                  |     (((regs_used_i[1] & x_issue_resp_dualread_i[1]) & scoreboard_q[x_rs_addr_i[1] | 6'b000001] & (x_result_rd_i != (x_rs_addr_i[1] | 6'b000001))) & x_issue_resp_dualread_i[1])
+                                  |     (((regs_used_i[2] & x_issue_resp_dualread_i[2]) & scoreboard_q[x_rs_addr_i[2] | 6'b000001] & (x_result_rd_i != (x_rs_addr_i[2] | 6'b000001))) & x_issue_resp_dualread_i[2]));
     end else begin : gen_fwd_no_dualread
       assign x_ex_fwd_o[0] = x_rs_addr_i[0] == waddr_ex_i & we_ex_i & ex_valid_i;
       assign x_ex_fwd_o[1] = x_rs_addr_i[1] == waddr_ex_i & we_ex_i & ex_valid_i;
@@ -244,11 +271,11 @@ module cv32e40px_x_disp
   always_comb begin
     scoreboard_d = scoreboard_q;
     if (x_issue_resp_writeback_i & x_issue_valid_o & x_issue_ready_i
-        & ~((waddr_id_i == x_result_rd_i) & x_result_valid_i & (x_result_rd_i != '0))) begin
+        & ~((waddr_id_i == x_result_waddr) & x_result_valid_i & x_result_writes)) begin
       scoreboard_d[waddr_id_i] = 1'b1;
     end
     if (x_result_valid_i & x_result_we_i) begin
-      scoreboard_d[x_result_rd_i] = 1'b0;
+      scoreboard_d[x_result_waddr] = 1'b0;
     end
   end
 
@@ -321,5 +348,11 @@ module cv32e40px_x_disp
   end
 
   assign x_result_rd_is_fp_o = pending_fp_rd_q[x_result_id_i];
+
+  // The result channel carries five bits of rd; bit 5 comes from the per-id
+  // record above. x0 is not a real destination, but f0 is, so the "does this
+  // write anything" test has to know which file it is.
+  assign x_result_waddr  = {x_result_rd_is_fp_o, x_result_rd_i};
+  assign x_result_writes = x_result_rd_is_fp_o | (x_result_rd_i != 5'b00000);
 
 endmodule : cv32e40px_x_disp

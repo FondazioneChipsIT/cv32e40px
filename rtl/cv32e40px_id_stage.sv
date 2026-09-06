@@ -382,6 +382,7 @@ module cv32e40px_id_stage
 
   logic        regfile_fp_a;
   logic        offload_rd_is_fp;
+  logic        offload_reads_fs1;
   logic        regfile_fp_b;
   logic        regfile_fp_c;
   logic        regfile_fp_d;
@@ -441,12 +442,12 @@ module cv32e40px_id_stage
   logic x_illegal_insn;
   logic x_branch_or_async_taken;
   logic x_control_illegal_reset;
-  logic [4:0] waddr_id;
-  logic [4:0] waddr_ex;
-  logic [4:0] waddr_wb;
+  logic [5:0] waddr_id;
+  logic [5:0] waddr_ex;
+  logic [5:0] waddr_wb;
   logic [2:0] regs_used;
   logic x_stall;
-  logic [2:0][4:0] x_rs_addr;
+  logic [2:0][5:0] x_rs_addr;
   logic x_mem_data_req;
   logic x_mem_valid;
   logic [RF_READ_PORTS-1:0] x_ex_fwd;
@@ -932,6 +933,18 @@ module cv32e40px_id_stage
             apu_read_regs_valid[0] = 1'b0;
           end
         endcase
+
+        // An offloaded OPFVF reads its scalar from an f register, and the APU
+        // is what writes those - fmv.w.x, fcvt.s.w, any FP arithmetic. The
+        // coprocessor dispatcher cannot see an APU result that is still in
+        // flight, so without this the offload issued with the previous contents
+        // of that register and reported the operand as valid: `fmv.w.x fa5, a0`
+        // followed by `vfmv.v.f v4, fa5` broadcast a stale scalar. Join the
+        // core's own APU dependency check instead of duplicating it.
+        if (offload_reads_fs1) begin
+          apu_read_regs[0]       = regfile_addr_ra_id;
+          apu_read_regs_valid[0] = 1'b1;
+        end
       end
 
       always_comb begin
@@ -1127,6 +1140,7 @@ module cv32e40px_id_stage
           .x_result_rd_i   (x_result_i.rd),
           .x_result_we_i   (x_result_i.we),
           .offload_rd_is_fp_i (offload_rd_is_fp),
+          .offload_fs1_dep_i  (offload_reads_fs1 & apu_read_dep_i),
           .x_result_rd_is_fp_o(x_result_rd_is_fp_o),
 
           // scoreboard, dependency check, stall, forwarding
@@ -1135,7 +1149,7 @@ module cv32e40px_id_stage
           .waddr_wb_i          (waddr_wb),
           .we_ex_i             (regfile_alu_we_ex_o),
           .we_wb_i             (regfile_we_wb_i),
-          .mem_instr_waddr_ex_i(regfile_waddr_ex_o[4:0]),
+          .mem_instr_waddr_ex_i(regfile_waddr_ex_o),
           .mem_instr_we_ex_i   (regfile_we_ex_o),
           .regs_used_i         (regs_used),
           .branch_or_jump_i    (x_branch_or_async_taken),
@@ -1174,14 +1188,22 @@ module cv32e40px_id_stage
       assign offload_rd_is_fp = (FPU == 1) & (instr[6:0] == OPCODE_OP_V)
                                 & (instr[14:12] == 3'b001) & (instr[31:26] == 6'b010000);
 
+      // OPFVF: the scalar operand comes from the FP register file (see the
+      // decoder, which raises reg_fp_a for it).
+      assign offload_reads_fs1 = (FPU == 1) & (instr[6:0] == OPCODE_OP_V)
+                                 & (instr[14:12] == 3'b101);
+
       assign x_issue_req_o.instr = instr;
       assign x_issue_req_o.ecs = '0;
-      assign x_rs_addr[0] = regfile_addr_ra_id[4:0];
-      assign x_rs_addr[1] = regfile_addr_rb_id[4:0];
-      assign x_rs_addr[2] = regfile_addr_rc_id[4:0];
-      assign waddr_id = instr[REG_D_MSB:REG_D_LSB];
-      assign waddr_ex = regfile_alu_waddr_ex_o[4:0];
-      assign waddr_wb = regfile_waddr_wb_i[4:0];
+      // Full six-bit register addresses, FP file bit included: the dispatcher
+      // compares these against each other, and dropping the bit makes f<n>
+      // alias x<n>.
+      assign x_rs_addr[0] = regfile_addr_ra_id;
+      assign x_rs_addr[1] = regfile_addr_rb_id;
+      assign x_rs_addr[2] = regfile_addr_rc_id;
+      assign waddr_id = {offload_rd_is_fp, instr[REG_D_MSB:REG_D_LSB]};
+      assign waddr_ex = regfile_alu_waddr_ex_o;
+      assign waddr_wb = regfile_waddr_wb_i;
       assign regs_used = {regc_used, regb_used, rega_used};
       assign x_result_valid_assigned_o = x_result_valid_i;
       assign x_mem_valid = x_mem_valid_i;
@@ -1201,6 +1223,17 @@ module cv32e40px_id_stage
               x_issue_req_o.rs[i+3*j] = result_fw_to_x_i;
             end else if (x_wb_fwd[i+3*j]) begin
               x_issue_req_o.rs[i+3*j] = regfile_wdata_wb_i;
+            end else if (regfile_alu_we_fw_i
+                         && (regfile_alu_waddr_fw_i ==
+                             (j == 0 ? x_rs_addr[i] : (x_rs_addr[i] | 6'b000001)))) begin
+              // The ALU/APU write port, one step behind EX: the value has left
+              // the execute stage and is being written to the register file in
+              // this very cycle, so the read above still returns the old one.
+              // The core forwards this port to its own operands (SEL_FW_EX) but
+              // the coprocessor operands never saw it - an `fmv.s.x f15, x10`
+              // that had just retired left the `vfmv.v.f v4, f15` behind it
+              // reading the previous contents of f15, reported as valid.
+              x_issue_req_o.rs[i+3*j] = regfile_alu_wdata_fw_i;
             end
           end
         end
@@ -1227,6 +1260,7 @@ module cv32e40px_id_stage
       assign x_result_valid_assigned_o = 1'b0;
       assign x_result_rd_is_fp_o       = 1'b0;
       assign offload_rd_is_fp          = 1'b0;
+      assign offload_reads_fs1         = 1'b0;
       assign x_mem_valid               = 1'b0;
       assign x_mem_data_req            = '0;
       assign x_mem_data_type_id        = '0;
