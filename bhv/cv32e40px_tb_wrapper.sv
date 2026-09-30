@@ -252,6 +252,7 @@ module cv32e40px_tb_wrapper
       .lsu_data_we_ex_i (cv32e40px_top_i.core_i.data_we_ex),
       .debug_mode_i     (cv32e40px_top_i.core_i.debug_mode),
       .debug_cause_i    (cv32e40px_top_i.core_i.debug_cause),
+      .debug_req_entry_i(cv32e40px_top_i.core_i.id_stage_i.controller_i.debug_req_entry_q),
       //// Instr IF probes ////
       .instr_req_i      (cv32e40px_top_i.core_i.instr_req_o),
       .instr_grant_i    (cv32e40px_top_i.core_i.instr_gnt_i),
