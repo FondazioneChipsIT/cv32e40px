@@ -1521,6 +1521,7 @@ insn_trace_t trace_if, trace_id, trace_ex, trace_ex_next, trace_wb;
     bit s_skip_wb;  // used to skip wb monitoring when apu resp and not lsu
 
     bit s_core_is_decoding;  // For readability, ctrl_fsm is DECODE or DECODE_HWLOOP
+    bit s_core_is_elw;  // ctrl_fsm is ELW_EXE or IRQ_FLUSH_ELW (COREV_CLUSTER)
 
     bit s_ex_reg_we_adjusted;  //ex_reg_we
     bit s_rf_we_wb_adjusted;  //
@@ -1555,6 +1556,7 @@ insn_trace_t trace_if, trace_id, trace_ex, trace_ex_next, trace_wb;
     s_skip_wb            = 1'b0;
 
     s_core_is_decoding   = 1'b0;
+    s_core_is_elw        = 1'b0;
 
     s_ex_reg_we_adjusted = 1'b0;
     s_rf_we_wb_adjusted  = 1'b0;
@@ -1566,6 +1568,8 @@ insn_trace_t trace_if, trace_id, trace_ex, trace_ex_next, trace_wb;
       #1;
 
       s_core_is_decoding = (r_pipe_freeze_trace.ctrl_fsm_cs == DECODE) || (r_pipe_freeze_trace.ctrl_fsm_cs == DECODE_HWLOOP);
+      // A cv.elw is in EX during ELW_EXE and in WB during IRQ_FLUSH_ELW.
+      s_core_is_elw = (r_pipe_freeze_trace.ctrl_fsm_cs == ELW_EXE) || (r_pipe_freeze_trace.ctrl_fsm_cs == IRQ_FLUSH_ELW);
       check_trap();
 
       pc_mux_interrupt = 1'b0;
@@ -1649,7 +1653,7 @@ insn_trace_t trace_if, trace_id, trace_ex, trace_ex_next, trace_wb;
 
       s_new_valid_insn = r_pipe_freeze_trace.id_valid && r_pipe_freeze_trace.is_decoding;// && !r_pipe_freeze_trace.apu_rvalid;
 
-      s_wb_valid_adjusted = r_pipe_freeze_trace.wb_valid && (s_core_is_decoding || (r_pipe_freeze_trace.ctrl_fsm_cs == FLUSH_EX) || (r_pipe_freeze_trace.ctrl_fsm_cs == FLUSH_WB) || (r_pipe_freeze_trace.ctrl_fsm_cs == DBG_FLUSH) || (r_pipe_freeze_trace.ctrl_fsm_cs == DBG_TAKEN_ID) || (r_pipe_freeze_trace.ctrl_fsm_cs == DBG_TAKEN_IF));// && !r_pipe_freeze_trace.apu_rvalid;;
+      s_wb_valid_adjusted = r_pipe_freeze_trace.wb_valid && (s_core_is_decoding || s_core_is_elw || (r_pipe_freeze_trace.ctrl_fsm_cs == FLUSH_EX) || (r_pipe_freeze_trace.ctrl_fsm_cs == FLUSH_WB) || (r_pipe_freeze_trace.ctrl_fsm_cs == DBG_FLUSH) || (r_pipe_freeze_trace.ctrl_fsm_cs == DBG_TAKEN_ID) || (r_pipe_freeze_trace.ctrl_fsm_cs == DBG_TAKEN_IF));// && !r_pipe_freeze_trace.apu_rvalid;;
       s_ex_reg_we_adjusted = r_pipe_freeze_trace.ex_reg_we && r_pipe_freeze_trace.mult_ready && r_pipe_freeze_trace.alu_ready && r_pipe_freeze_trace.lsu_ready_ex && !s_apu_to_alu_port;
       s_rf_we_wb_adjusted = r_pipe_freeze_trace.rf_we_wb && (~r_pipe_freeze_trace.data_misaligned_ex && r_pipe_freeze_trace.wb_ready) && (!s_apu_to_lsu_port || r_pipe_freeze_trace.wb_contention_lsu);
 
@@ -1783,7 +1787,7 @@ insn_trace_t trace_if, trace_id, trace_ex, trace_ex_next, trace_wb;
       end
 
       // If mret, we need to keep the instruction in Id during flush_ex because mstatus update happens at that time
-      s_ex_valid_adjusted = (r_pipe_freeze_trace.ex_valid && r_pipe_freeze_trace.ex_ready) && (s_core_is_decoding || (r_pipe_freeze_trace.ctrl_fsm_cs == DBG_TAKEN_IF) || (r_pipe_freeze_trace.ctrl_fsm_cs == DBG_TAKEN_ID) || (r_pipe_freeze_trace.ctrl_fsm_cs == DBG_FLUSH) || ((r_pipe_freeze_trace.ctrl_fsm_cs == FLUSH_EX) && !r_pipe_freeze_trace.mret_insn_dec));
+      s_ex_valid_adjusted = (r_pipe_freeze_trace.ex_valid && r_pipe_freeze_trace.ex_ready) && (s_core_is_decoding || s_core_is_elw || (r_pipe_freeze_trace.ctrl_fsm_cs == DBG_TAKEN_IF) || (r_pipe_freeze_trace.ctrl_fsm_cs == DBG_TAKEN_ID) || (r_pipe_freeze_trace.ctrl_fsm_cs == DBG_FLUSH) || ((r_pipe_freeze_trace.ctrl_fsm_cs == FLUSH_EX) && !r_pipe_freeze_trace.mret_insn_dec));
       //EX_STAGE
 
       if (trace_id.m_valid) begin
