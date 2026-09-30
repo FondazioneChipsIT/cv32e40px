@@ -664,6 +664,14 @@ insn_trace_t trace_if, trace_id, trace_ex, trace_ex_next, trace_wb;
   logic   [2:0] saved_debug_cause;
   integer       next_send;
 
+  // Report mstatus.FS set by an older FP write, in wdata too unless the row writes FS.
+  function void mstatus_fs_from_older(insn_trace_t trace);
+    trace.m_csr.mstatus_fs_rdata = r_pipe_freeze_trace.csr.mstatus_fs_n;
+    if (!trace.m_csr.mstatus_fs_we) begin
+      trace.m_csr.mstatus_fs_wdata = r_pipe_freeze_trace.csr.mstatus_fs_n;
+    end
+  endfunction
+
   event         e_empty_queue;
   function void empty_fifo();
     integer i, trace_q_size;
@@ -677,7 +685,7 @@ insn_trace_t trace_if, trace_id, trace_ex, trace_ex_next, trace_wb;
         new_rvfi_trace = new();
         new_rvfi_trace.copy_full(wb_bypass_trace_q.pop_front());
         if (next_send == new_rvfi_trace.m_order) begin
-          new_rvfi_trace.m_csr.mstatus_fs_rdata = r_pipe_freeze_trace.csr.mstatus_fs_n;
+          mstatus_fs_from_older(new_rvfi_trace);
           rvfi_trace_q.push_back(new_rvfi_trace);
           next_send = next_send + 1;
           ->e_empty_queue;
@@ -1324,7 +1332,7 @@ insn_trace_t trace_if, trace_id, trace_ex, trace_ex_next, trace_wb;
     `CSR_FROM_PIPE(id, mstatus)
     `CSR_FROM_PIPE(id, mstatus_fs)
     if(r_pipe_freeze_trace.csr.fregs_we && !r_pipe_freeze_trace.csr.mstatus_fs_we && !(r_pipe_freeze_trace.csr.we && r_pipe_freeze_trace.csr.mstatus_fs_we)) begin //writes happening in ex that needs to be reported to id
-      trace_id.m_csr.mstatus_fs_rdata = r_pipe_freeze_trace.csr.mstatus_fs_n;
+      mstatus_fs_from_older(trace_id);
       ->e_fregs_dirty_2;
     end
     ->e_mstatus_to_id;
@@ -1368,13 +1376,13 @@ insn_trace_t trace_if, trace_id, trace_ex, trace_ex_next, trace_wb;
     `CSR_FROM_PIPE(apu_resp, mstatus_fs)
 
     if (r_pipe_freeze_trace.csr.mstatus_fs_we && (trace_id.m_order > trace_apu_resp.m_order)) begin
-      trace_id.m_csr.mstatus_fs_rdata = r_pipe_freeze_trace.csr.mstatus_fs_n;
+      mstatus_fs_from_older(trace_id);
     end
     if (r_pipe_freeze_trace.csr.mstatus_fs_we && (trace_ex.m_order > trace_apu_resp.m_order)) begin
-      trace_ex.m_csr.mstatus_fs_rdata = r_pipe_freeze_trace.csr.mstatus_fs_n;
+      mstatus_fs_from_older(trace_ex);
     end
     if (r_pipe_freeze_trace.csr.mstatus_fs_we && (trace_wb.m_order > trace_apu_resp.m_order)) begin
-      trace_wb.m_csr.mstatus_fs_rdata = r_pipe_freeze_trace.csr.mstatus_fs_n;
+      mstatus_fs_from_older(trace_wb);
     end
   endfunction
 
