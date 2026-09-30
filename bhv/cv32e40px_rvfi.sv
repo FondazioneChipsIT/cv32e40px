@@ -1164,6 +1164,18 @@ insn_trace_t trace_if, trace_id, trace_ex, trace_ex_next, trace_wb;
     trace_id.m_csr.mtvec_wmask = r_pipe_freeze_trace.csr.mtvec_we ? '1 : '0;
   endfunction
 
+  // Report dpc and dcsr of a debug entry as writes of its row.
+  function void debug_entry_csrs(insn_trace_t trace);
+    trace.m_csr.dpc_we     = 1'b1;
+    trace.m_csr.dpc_rdata  = r_pipe_freeze_trace.csr.dpc_q;
+    trace.m_csr.dpc_wdata  = r_pipe_freeze_trace.csr.dpc_n;
+    trace.m_csr.dpc_wmask  = '1;
+    trace.m_csr.dcsr_we    = 1'b1;
+    trace.m_csr.dcsr_rdata = r_pipe_freeze_trace.csr.dcsr_q;
+    trace.m_csr.dcsr_wdata = r_pipe_freeze_trace.csr.dcsr_n;
+    trace.m_csr.dcsr_wmask = '1;
+  endfunction
+
   function void dcsr_to_id();
     trace_id.m_csr.dcsr_wdata = trace_id.m_csr.dcsr_we ? trace_id.m_csr.dcsr_wdata : r_pipe_freeze_trace.csr.dcsr_n;
     trace_id.m_csr.dcsr_we = r_pipe_freeze_trace.csr.dcsr_we | trace_id.m_csr.dcsr_we;
@@ -1578,6 +1590,14 @@ insn_trace_t trace_if, trace_id, trace_ex, trace_ex_next, trace_wb;
           tinfo_to_trace(trace_id);
           `CSR_FROM_PIPE(id, mip)
         end
+      end
+      // An ebreak enters debug: its row, already in the EX or ID slot, gets dpc and dcsr.
+      if ((r_pipe_freeze_trace.ctrl_fsm_cs == DBG_TAKEN_ID) &&
+          (r_pipe_freeze_trace.debug_cause == DBG_CAUSE_EBREAK) && !r_pipe_freeze_trace.debug_mode) begin
+        if (trace_ex.m_valid && trace_ex.m_pc_rdata == r_pipe_freeze_trace.pc_id)
+          debug_entry_csrs(trace_ex);
+        else if (trace_id.m_valid && trace_id.m_pc_rdata == r_pipe_freeze_trace.pc_id)
+          debug_entry_csrs(trace_id);
       end
 
       if (r_pipe_freeze_trace.data_rvalid) begin
@@ -2008,6 +2028,8 @@ insn_trace_t trace_if, trace_id, trace_ex, trace_ex_next, trace_wb;
           if (r_pipe_freeze_trace.id_valid && r_pipe_freeze_trace.id_ready && !trace_id.m_valid && trace_if.m_is_ebreak) begin
             if_to_id();
             trace_id.m_is_ebreak = '1;
+            // An ebreak row formed after its debug entry (ID stalled) gets dcsr here; dpc comes from if_to_id().
+            dcsr_to_id();
             ->e_if_2_id_2;
           end else if (trace_if.m_is_illegal) begin
             if_to_id();
