@@ -67,6 +67,7 @@
     logic        m_got_first_data;
     logic        m_got_ex_reg;
     logic       m_dbg_taken;
+    logic       m_dbg_mode;   // debug mode in which the instruction executes
     logic [2:0] m_dbg_cause;
 
     logic       m_fflags_we_non_apu;
@@ -206,6 +207,7 @@
       this.m_got_ex_reg             = 1'b0;
       this.m_intr                   = '0;
       this.m_dbg_taken              = 1'b0;
+      this.m_dbg_mode               = 1'b0;
       this.m_dbg_cause              = '0;
       this.m_is_ebreak              = '0;
       this.m_is_ecall               = '0;
@@ -989,6 +991,7 @@
 
       this.m_intr      = m_source.m_intr;
       this.m_dbg_taken = m_source.m_dbg_taken;
+      this.m_dbg_mode  = m_source.m_dbg_mode;
       this.m_dbg_cause = m_source.m_dbg_cause;
       this.m_trap      = m_source.m_trap;
 
@@ -1037,6 +1040,7 @@
       this.m_got_first_data         = m_source.m_got_first_data;
       this.m_got_ex_reg             = m_source.m_got_ex_reg;
       this.m_dbg_taken              = m_source.m_dbg_taken;
+      this.m_dbg_mode               = m_source.m_dbg_mode;
       this.m_dbg_cause              = m_source.m_dbg_cause;
       this.m_is_ebreak              = m_source.m_is_ebreak;
       this.m_is_ecall               = m_source.m_is_ecall;
