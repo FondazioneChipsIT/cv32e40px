@@ -53,6 +53,7 @@
     logic [31:0] m_insn;
     string       m_mnemonic;
     logic        m_is_ebreak;
+    logic        m_is_ecall;
     logic        m_is_illegal;
     logic        m_is_irq;
     logic        m_is_memory;
@@ -207,6 +208,7 @@
       this.m_dbg_taken              = 1'b0;
       this.m_dbg_cause              = '0;
       this.m_is_ebreak              = '0;
+      this.m_is_ecall               = '0;
       this.m_is_illegal             = '0;
       this.m_is_irq                 = '0;
       this.m_is_memory              = 1'b0;
@@ -1037,6 +1039,7 @@
       this.m_dbg_taken              = m_source.m_dbg_taken;
       this.m_dbg_cause              = m_source.m_dbg_cause;
       this.m_is_ebreak              = m_source.m_is_ebreak;
+      this.m_is_ecall               = m_source.m_is_ecall;
       this.m_is_illegal             = m_source.m_is_illegal;
       this.m_is_irq                 = m_source.m_is_irq;
       this.m_instret_cnt            = m_source.m_instret_cnt;
