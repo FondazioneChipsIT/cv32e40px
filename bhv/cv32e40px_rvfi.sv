@@ -977,6 +977,13 @@ insn_trace_t trace_if, trace_id, trace_ex, trace_ex_next, trace_wb;
     rvfi_csr_mhpmevent_wmask[idx] = new_rvfi_trace.m_csr.mhpmevent_wmask[idx] & MHPMEVENT_WRITE_MASK;
     rvfi_csr_mhpmevent_rdata[idx] = new_rvfi_trace.m_csr.mhpmevent_rdata[idx];
     rvfi_csr_mhpmevent_wdata[idx] = new_rvfi_trace.m_csr.mhpmevent_wdata[idx];
+
+    // Not implemented above NUM_MHPMCOUNTERS + 2: the core ignores the write.
+    if (idx >= NUM_MHPMCOUNTERS + 3) begin
+      rvfi_csr_mhpmcounter_wmask[idx]  = '0;
+      rvfi_csr_mhpmcounterh_wmask[idx] = '0;
+      rvfi_csr_mhpmevent_wmask[idx]    = '0;
+    end
     end
     // `SET_RVFI_CSR_FROM_INSN(instreth)
     rvfi_csr_instreth_rdata = new_rvfi_trace.m_csr.minstreth_rdata;
