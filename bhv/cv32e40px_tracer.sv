@@ -22,7 +22,7 @@
 //                                                                            //
 ////////////////////////////////////////////////////////////////////////////////
 
-`ifdef CV32E40P_TRACE_EXECUTION
+`ifdef CV32E40PX_TRACE_EXECUTION
 
 `include "uvm_macros.svh"
 

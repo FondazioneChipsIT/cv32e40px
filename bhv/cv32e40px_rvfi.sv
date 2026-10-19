@@ -864,6 +864,7 @@ insn_trace_t trace_if, trace_id, trace_ex, trace_ex_next, trace_wb;
 
     rvfi_dbg       = new_rvfi_trace.m_dbg_cause;
     rvfi_dbg_mode  = new_rvfi_trace.m_dbg_taken;
+    rvfi_intr      = new_rvfi_trace.m_intr;  // by RICCARDO GIANI, patch copied from file cv32e40p_rvfi.sv
 
     rvfi_trap.trap = 0;
     if (new_rvfi_trace.m_is_illegal) begin
@@ -1244,8 +1245,12 @@ insn_trace_t trace_if, trace_id, trace_ex, trace_ex_next, trace_wb;
   endfunction
 
   bit s_was_flush;  //debug exception is flagged as trap only if preceed by a flush
+  // Armed at the trap/interrupt redirect (check_trap), consumed by the next
+  // IF fill: that instruction is the first of the handler, which per the
+  // RVFI spec carries rvfi_intr (cause + interrupt/exception kind).
+  rvfi_intr_t s_pending_intr = '0; // by RICCARDO GIANI, patch copied from file cv32e40p_rvfi.sv
   //Work arround until I find the coreect way to distinguish trap
-  function void check_trap();
+  function void check_trap();  // by RICCARDO GIANI, patches for all function copied from file cv32e40p_rvfi.sv
     bit s_dbg_exception, s_exception, s_irq;
     s_dbg_exception = 1'b0;
     s_exception     = 1'b0;
@@ -1259,10 +1264,18 @@ insn_trace_t trace_if, trace_id, trace_ex, trace_ex_next, trace_wb;
       end
       if (r_pipe_freeze_trace.exc_pc_mux == EXC_PC_EXCEPTION) begin
         s_exception = 1'b1;
+        s_pending_intr.intr      = 1'b1;
+        s_pending_intr.exception = 1'b1;
+        s_pending_intr.interrupt = 1'b0;
+        s_pending_intr.cause     = {6'h0, r_pipe_freeze_trace.csr_cause[4:0]};
       end
       if (r_pipe_freeze_trace.exc_pc_mux == EXC_PC_IRQ) begin
         s_irq = 1'b1;
         trace_if.m_is_irq = 1'b1;
+        s_pending_intr.intr      = 1'b1;
+        s_pending_intr.exception = 1'b0;
+        s_pending_intr.interrupt = 1'b1;
+        s_pending_intr.cause     = {6'h0, r_pipe_freeze_trace.csr_cause[4:0]};
       end
     end
 
@@ -1493,6 +1506,11 @@ insn_trace_t trace_if, trace_id, trace_ex, trace_ex_next, trace_wb;
 
     bit s_dont_override_mstatus_fs_id;
 
+    // Asynchronous debug entry (haltreq): drop of the killed ID-stage
+    // instruction (see the arming block in the monitor loop).
+    bit          s_halt_kill_pending; // by RICCARDO GIANI, patch copied from file cv32e40p_rvfi.sv
+    logic [31:0] s_halt_kill_pc;  // by RICCARDO GIANI, patch copied from file cv32e40p_rvfi.sv
+
     trace_if             = new();
     trace_id             = new();
     trace_ex             = new();
@@ -1527,6 +1545,9 @@ insn_trace_t trace_if, trace_id, trace_ex, trace_ex_next, trace_wb;
 
     s_dont_override_mstatus_fs_id = 1'b0;
 
+    s_halt_kill_pending  = 1'b0;  // by RICCARDO GIANI, patch copied from file cv32e40p_rvfi.sv
+    s_halt_kill_pc       = '0;  // by RICCARDO GIANI, patch copied from file cv32e40p_rvfi.sv
+    
     forever begin
       wait(e_pipe_monitor_ok.triggered);  // event triggered
       #1;
@@ -1550,6 +1571,44 @@ insn_trace_t trace_if, trace_id, trace_ex, trace_ex_next, trace_wb;
           tinfo_to_trace(trace_id);
           `CSR_FROM_PIPE(id, mip)
         end
+      end
+
+      // by RICCARDO GIANI, patches copied from file cv32e40p_rvfi.sv
+      // Asynchronous debug entry (haltreq): DBG_TAKEN_ID kills the instruction
+      // still in ID - dpc points at it and it never executes (its rd keeps the
+      // old value). Drop its pending trace_id row so no phantom retire is
+      // emitted, and release its order so the next init (the first debug-ROM
+      // instruction) reuses it: send_rvfi enforces strict order contiguity.
+      // The fill of trace_id may land one or more monitor iterations after
+      // the arming, depending on pipeline timing; the drop check below runs
+      // every iteration until the armed PC shows up or a different decode
+      // disarms it (end of this loop body).
+      // The ebreak/trigger/step flavours keep their existing handling (there
+      // the ID instruction is the entry cause itself; step uses DBG_TAKEN_IF).
+      // The !s_halt_kill_pending guard keeps a back-to-back second haltreq
+      // (or a multi-cycle stay in DBG_TAKEN_ID) from overwriting the armed
+      // PC before its row was dropped. Residual corner, accepted: with an
+      // EMPTY ID stage pc_id may be stale here and arm a PC that never
+      // fills - harmless, the first genuine decode with a different PC
+      // disarms it (the plain id_valid qualifier cannot gate the arming:
+      // pipe valids drop during DBG_TAKEN_ID, see s_ex_valid_adjusted).
+      if ((r_pipe_freeze_trace.ctrl_fsm_cs == DBG_TAKEN_ID) &&
+          (r_pipe_freeze_trace.debug_cause == DBG_CAUSE_HALTREQ) &&
+          !r_pipe_freeze_trace.ebrk_insn_dec && !r_pipe_freeze_trace.debug_mode &&
+          !s_halt_kill_pending) begin
+        s_halt_kill_pending = 1'b1;
+        s_halt_kill_pc      = r_pipe_freeze_trace.pc_id;
+      end
+      // Order bookkeeping: this RE-USES the killed row's order (decrement,
+      // the next init increments back onto it). Deliberately NOT the
+      // m_skip_order/get_order_for_trap() mechanism, which SKIPS a number
+      // consumed elsewhere - opposite semantics, do not unify.
+      if (s_halt_kill_pending && trace_id.m_valid &&
+          (trace_id.m_pc_rdata == s_halt_kill_pc)) begin
+        trace_id.m_valid              = 1'b0;
+        trace_id.m_order              = trace_id.m_order - 64'h1;
+        s_dont_override_mstatus_fs_id = 1'b0;
+        s_halt_kill_pending           = 1'b0;
       end
 
       if (r_pipe_freeze_trace.data_rvalid) begin
@@ -1640,7 +1699,7 @@ insn_trace_t trace_if, trace_id, trace_ex, trace_ex_next, trace_wb;
           trace_wb.m_rd_wdata[0] = r_pipe_freeze_trace.rf_wdata_wb;
         end
 
-        if (r_pipe_freeze_trace.csr.fregs_we) begin
+        if(r_pipe_freeze_trace.csr.fregs_we && r_pipe_freeze_trace.rf_we_wb && r_pipe_freeze_trace.rf_addr_wb[5]) begin //Catching mstatus updates caused by flw, by RICCARDO GIANI, patch copied from file cv32e40p_rvfi.sv
           `CSR_FROM_PIPE(wb, mstatus_fs)
           trace_wb.m_csr.mstatus_fs_we = 1'b1;
           trace_wb.m_csr.mstatus_fs_wmask = '1;
@@ -1726,8 +1785,15 @@ insn_trace_t trace_if, trace_id, trace_ex, trace_ex_next, trace_wb;
         end
       end
 
+      // by RICCARDO GIANI, patch copied from file cv32e40p_rvfi.sv
       // If mret, we need to keep the instruction in Id during flush_ex because mstatus update happens at that time
-      s_ex_valid_adjusted = (r_pipe_freeze_trace.ex_valid && r_pipe_freeze_trace.ex_ready) && (s_core_is_decoding || (r_pipe_freeze_trace.ctrl_fsm_cs == DBG_TAKEN_IF) || (r_pipe_freeze_trace.ctrl_fsm_cs == DBG_TAKEN_ID) || (r_pipe_freeze_trace.ctrl_fsm_cs == DBG_FLUSH) || ((r_pipe_freeze_trace.ctrl_fsm_cs == FLUSH_EX) && !r_pipe_freeze_trace.mret_insn_dec));
+      // DBG_TAKEN_ID with debug_cause==HALTREQ kills the ID-stage instruction:
+      // the controller drains EX/WB through DBG_FLUSH before the entry, so a
+      // handshake accepted here belongs to the killed instruction and emits a
+      // phantom retire (with a stale rd write) that never happened
+      // architecturally. Keep accepting the ebreak/trigger/step flavours,
+      // whose ID instruction is the entry cause itself.
+      s_ex_valid_adjusted = (r_pipe_freeze_trace.ex_valid && r_pipe_freeze_trace.ex_ready) && (s_core_is_decoding || (r_pipe_freeze_trace.ctrl_fsm_cs == DBG_TAKEN_IF) || ((r_pipe_freeze_trace.ctrl_fsm_cs == DBG_TAKEN_ID) && (r_pipe_freeze_trace.debug_cause != DBG_CAUSE_HALTREQ)) || (r_pipe_freeze_trace.ctrl_fsm_cs == DBG_FLUSH) || ((r_pipe_freeze_trace.ctrl_fsm_cs == FLUSH_EX) && !r_pipe_freeze_trace.mret_insn_dec));
       //EX_STAGE
 
       if (trace_id.m_valid) begin
@@ -1853,11 +1919,14 @@ insn_trace_t trace_if, trace_id, trace_ex, trace_ex_next, trace_wb;
               trace_id.m_mem_req_id[0] = cnt_data_req;
             end
 
+            // RVFI spec: rmask flags the bytes a LOAD reads, wmask the bytes
+            // a STORE writes (data_we_ex=0 is a load). The two assignments
+            // were historically swapped.
             if (!r_pipe_freeze_trace.data_we_ex) begin
               trace_id.m_is_load   = 1'b1;
-              trace_id.m_mem.wmask = be_to_mask(r_pipe_freeze_trace.lsu_data_be);  //'1;
+              trace_id.m_mem.rmask = be_to_mask(r_pipe_freeze_trace.lsu_data_be);  //'1; by RICCARDO GIANI, to solve nested interrupt errors, old: *.m_mem.wmask
             end else begin
-              trace_id.m_mem.rmask = be_to_mask(r_pipe_freeze_trace.lsu_data_be);  //'1;
+              trace_id.m_mem.wmask = be_to_mask(r_pipe_freeze_trace.lsu_data_be);  //'1; by RICCARDO GIANI, to solve nested interrupt errors, old: *.m_mem.rmask
             end
 
             if (trace_id.m_got_ex_reg) begin  // Shift index 0 to 1
@@ -1918,8 +1987,14 @@ insn_trace_t trace_if, trace_id, trace_ex, trace_ex_next, trace_wb;
               cnt_data_req = cnt_data_req + 1;
               trace_id.m_mem_req_id[0] = cnt_data_req;
             end
-            if (!r_pipe_freeze_trace.data_we_ex) begin
+            // Mirror the mask capture of the other data_req_ex site above:
+            // this path recorded the address but left both masks at 0, so
+            // these accesses were invisible to any RVFI mem-mask consumer.
+            if (!r_pipe_freeze_trace.data_we_ex) begin  // by RICCARDO GIANI, patch copied from file cv32e40p_rvfi.sv
               trace_id.m_is_load = 1'b1;
+              trace_id.m_mem.rmask = be_to_mask(r_pipe_freeze_trace.lsu_data_be);
+            end else begin
+              trace_id.m_mem.wmask = be_to_mask(r_pipe_freeze_trace.lsu_data_be);
             end
             if (trace_id.m_got_ex_reg) begin  // Shift index 0 to 1
               trace_id.m_mem_req_id[1] = trace_id.m_mem_req_id[0];
@@ -1981,6 +2056,11 @@ insn_trace_t trace_if, trace_id, trace_ex, trace_ex_next, trace_wb;
         trace_if.m_dbg_cause = saved_debug_cause;
         trace_if.m_is_ebreak = '0;
         trace_if.m_trap = 1'b0;
+        // First fill after a trap/interrupt redirect = first handler
+        // instruction: consume the pending rvfi_intr mark (insn_trace_t
+        // init() copies m_intr down the pipe, so it rides to the retire).
+        trace_if.m_intr = s_pending_intr;  // by RICCARDO GIANI, patch copied from file cv32e40p_rvfi.sv
+        s_pending_intr  = '0;  // by RICCARDO GIANI, patch copied from file cv32e40p_rvfi.sv
 
         trace_if.m_valid = 1'b1;
       end
@@ -2009,6 +2089,14 @@ insn_trace_t trace_if, trace_id, trace_ex, trace_ex_next, trace_wb;
         s_was_flush = 1'b1;
       end else begin
         s_was_flush = 1'b0;
+      end
+      // by RICCARDO GIANI, patch copied from file cv32e40p_rvfi.sv
+      // First decode that fills trace_id with a different pc: the entry left
+      // no killed row behind (or it was already dropped) - disarm, so a later
+      // legitimate re-execution of the same pc (dret back to dpc) never drops.
+      if (s_halt_kill_pending && s_new_valid_insn && trace_id.m_valid &&
+          (trace_id.m_pc_rdata != s_halt_kill_pc)) begin
+        s_halt_kill_pending = 1'b0;
       end
       #1;
     end

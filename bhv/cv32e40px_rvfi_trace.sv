@@ -151,7 +151,7 @@ module cv32e40px_rvfi_trace
 
   assign rs4 = rs3;
 
-  cv32e40p_compressed_decoder #(
+  cv32e40px_compressed_decoder #(
       .FPU(FPU)
   ) rvfi_trace_decompress_i (
       .instr_i(rvfi_insn),

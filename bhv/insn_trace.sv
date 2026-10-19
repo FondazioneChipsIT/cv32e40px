@@ -40,7 +40,7 @@
     this.m_csr.``CSR_NAME``_we    = '0; \
     this.m_csr.``CSR_NAME``_wmask = '0;
 
-  import cv32e40p_tracer_pkg::*;
+  import cv32e40px_tracer_pkg::*;
   class insn_trace_t;
     bit m_valid;
     logic [63:0] m_order;
