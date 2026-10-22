@@ -13,7 +13,7 @@
 # limitations under the License.
 
 package:
-  name: riscv
+  name: cv32e40px
 
 dependencies:
   fpnew: { git: "https://github.com/pulp-platform/fpnew.git", version: 0.6.1 }
