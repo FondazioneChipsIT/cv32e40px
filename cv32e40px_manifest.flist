@@ -57,6 +57,7 @@ ${DESIGN_RTL_DIR}/cv32e40px_prefetch_controller.sv
 ${DESIGN_RTL_DIR}/cv32e40px_sleep_unit.sv
 ${DESIGN_RTL_DIR}/cv32e40px_core.sv
 
+${DESIGN_RTL_DIR}/cv32e40px_x_disp.sv
 ${DESIGN_RTL_DIR}/cv32e40px_top.sv
 
 ${DESIGN_RTL_DIR}/../bhv/cv32e40px_sim_clock_gate.sv
