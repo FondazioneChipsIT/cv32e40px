@@ -54,7 +54,11 @@ module cv32e40px_fp_wrapper
 
 
   // assign apu_rID_o = '0;
-  assign {fpu_vec_op, fpu_op_mod, fpu_op}                     = apu_op_i;
+  // The core encodes the op on cv32e40px_fpu_pkg::OP_BITS, narrower than FPnew's: unpack, then zero-extend
+  logic [cv32e40px_fpu_pkg::OP_BITS-1:0] fpu_op_core;
+
+  assign {fpu_vec_op, fpu_op_mod, fpu_op_core}                = apu_op_i;
+  assign fpu_op                                               = fpnew_pkg::OP_BITS'(fpu_op_core);
 
   assign {fpu_int_fmt, fpu_src_fmt, fpu_dst_fmt, fp_rnd_mode} = apu_flags_i;
 
@@ -64,16 +68,13 @@ module cv32e40px_fp_wrapper
   // FPU Config
   // -----------
   // Features (enabled formats, vectors etc.)
-  localparam fpnew_pkg::fpu_features_t FPU_FEATURES = fpnew_pkg::RV32F;
-  //localparam fpnew_pkg::fpu_features_t FPU_FEATURES = '{
-  //    Width: C_FLEN,
-  //    EnableVectors: C_XFVEC,
-  //    EnableNanBox: 1'b0,
-  //    FpFmtMask: {
-  //  C_RVF, C_RVD, C_XF16, C_XF8, C_XF16ALT
-  //}, IntFmtMask: {
-  //  C_XFVEC && C_XF8, C_XFVEC && (C_XF16 || C_XF16ALT), 1'b1, 1'b0
-  //}};
+  localparam fpnew_pkg::fpu_features_t FPU_FEATURES = '{
+      Width:         C_FLEN,
+      EnableVectors: C_XFVEC,
+      EnableNanBox:  1'b0,
+      FpFmtMask:     {C_RVF, C_RVD, C_XF16, C_XF8, C_XF16ALT, 1'b0},
+      IntFmtMask:    {C_XFVEC && C_XF8, C_XFVEC && (C_XF16 || C_XF16ALT), 1'b1, 1'b0}
+  };
 
   // Implementation (number of registers etc)
   localparam fpnew_pkg::fpu_implementation_t FPU_IMPLEMENTATION = '{

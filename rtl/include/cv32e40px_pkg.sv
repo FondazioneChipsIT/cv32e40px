@@ -768,7 +768,7 @@ package cv32e40px_pkg;
   parameter bit C_RVD = 1'b0;  // Is D extension enabled - NOT SUPPORTED CURRENTLY
 
   // Transprecision floating-point extensions configuration
-  parameter bit C_XF16 = 1'b0;  // Is half-precision float extension (Xf16) enabled
+  parameter bit C_XF16 = 1'b1;  // Is half-precision float extension (Xf16) enabled
   parameter bit C_XF16ALT = 1'b0; // Is alternative half-precision float extension (Xf16alt) enabled
   parameter bit C_XF8 = 1'b0;  // Is quarter-precision float extension (Xf8) enabled
   parameter bit C_XFVEC = 1'b0;  // Is vectorial float extension (Xfvec) enabled

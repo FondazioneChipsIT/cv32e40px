@@ -23,6 +23,8 @@ dependencies:
 sources:
   include_dirs:
     - rtl/include
+    - bhv
+    - bhv/include
   files:
     - rtl/include/cv32e40px_core_v_xif_pkg.sv
     - rtl/include/cv32e40px_fpu_pkg.sv
@@ -63,3 +65,10 @@ sources:
     - target: rtl
       files:
         - bhv/cv32e40px_sim_clock_gate.sv
+    # Instruction tracer: the body is guarded by CV32E40PX_TRACE_EXECUTION and needs UVM on the include path
+    - target: all(any(rtl, test, cv32e40px_include_tracer), not(cv32e40px_exclude_tracer))
+      defines:
+        CV32E40PX_TRACE_EXECUTION: ~
+      files:
+        - bhv/include/cv32e40px_tracer_pkg.sv
+        - bhv/cv32e40px_tracer.sv
