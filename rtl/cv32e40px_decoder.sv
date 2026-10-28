@@ -2810,6 +2810,7 @@ module cv32e40px_decoder
             CSR_MSTATUS,
               CSR_MEPC,
               CSR_MTVEC,
+              CSR_MTVT,
               CSR_MCAUSE :
                 // Not illegal, but treat as status CSR for side effect handling
                 csr_status_o = 1'b1;

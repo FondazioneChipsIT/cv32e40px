@@ -41,7 +41,10 @@ module cv32e40px_cs_registers
     parameter NUM_MHPMCOUNTERS = 1,
     parameter COREV_PULP       = 0,
     parameter COREV_CLUSTER    = 0,
-    parameter DEBUG_TRIGGER_EN = 1
+    parameter DEBUG_TRIGGER_EN = 1,
+    parameter CLIC             = 0,
+    parameter CLIC_SHV         = 1,  // set default to 1, used for mnxti csr operation
+    parameter NUM_INTERRUPTS   = 32
 ) (
     // Clock and Reset
     input logic clk,
@@ -51,12 +54,16 @@ module cv32e40px_cs_registers
     input  logic [31:0] hart_id_i,
     output logic [23:0] mtvec_o,
     output logic [23:0] utvec_o,
+    output logic [23:0] mtvt_o,
+    output logic [23:0] utvt_o,
     output logic [ 1:0] mtvec_mode_o,
     output logic [ 1:0] utvec_mode_o,
 
     // Used for mtvec address
     input logic [31:0] mtvec_addr_i,
     input logic        csr_mtvec_init_i,
+    input logic [31:0] mtvt_addr_i,
+    input logic        csr_mtvt_init_i,
 
     // Interface to registers (SRAM like)
     input  csr_num_e           csr_addr_i,
@@ -219,6 +226,8 @@ module cv32e40px_cs_registers
   logic [5:0] ucause_q, ucause_n;
   logic [23:0] mtvec_n, mtvec_q;
   logic [23:0] utvec_n, utvec_q;
+  logic [23:0] mtvt_n, mtvt_q;
+  logic [23:0] utvt_n, utvt_q;
   logic [1:0] mtvec_mode_n, mtvec_mode_q;
   logic [1:0] utvec_mode_n, utvec_mode_q;
 
@@ -322,6 +331,8 @@ module cv32e40px_cs_registers
 
         // mtvec: machine trap-handler base address
         CSR_MTVEC: csr_rdata_int = {mtvec_q, 6'h0, mtvec_mode_q};
+        // mtvt: machine trap-handler vector table base address
+        CSR_MTVT: csr_rdata_int = {mtvt_q, 8'h0};
         // mscratch: machine scratch
         CSR_MSCRATCH: csr_rdata_int = mscratch_q;
         // mepc: exception program counter
@@ -488,6 +499,8 @@ module cv32e40px_cs_registers
 
         // mtvec: machine trap-handler base address
         CSR_MTVEC: csr_rdata_int = {mtvec_q, 6'h0, mtvec_mode_q};
+        // mtvt: machine trap-handler vector table base address
+        CSR_MTVT: csr_rdata_int = {mtvt_q, 8'h0};
         // mscratch: machine scratch
         CSR_MSCRATCH: csr_rdata_int = mscratch_q;
         // mepc: exception program counter
@@ -621,6 +634,7 @@ module cv32e40px_cs_registers
       exception_pc            = pc_id_i;
       priv_lvl_n              = priv_lvl_q;
       mtvec_n                 = csr_mtvec_init_i ? mtvec_addr_i[31:8] : mtvec_q;
+      mtvt_n                  = csr_mtvt_init_i  ? mtvt_addr_i[31:6]  : mtvt_q;
       utvec_n                 = utvec_q;
       mtvec_mode_n            = mtvec_mode_q;
       utvec_mode_n            = utvec_mode_q;
@@ -665,6 +679,10 @@ module cv32e40px_cs_registers
         if (csr_we_int) begin
           mtvec_n      = csr_wdata_int[31:8];
           mtvec_mode_n = {1'b0, csr_wdata_int[0]};  // Only direct and vectored mode are supported
+        end
+        CSR_MTVT:
+        if (csr_we_int) begin
+          mtvt_n       = csr_wdata_int[31:8];
         end
         // mscratch: machine scratch
         CSR_MSCRATCH:
@@ -906,6 +924,7 @@ module cv32e40px_cs_registers
       exception_pc = pc_id_i;
       priv_lvl_n = priv_lvl_q;
       mtvec_n = csr_mtvec_init_i ? mtvec_addr_i[31:8] : mtvec_q;
+      mtvt_n  = csr_mtvt_init_i  ? mtvt_addr_i[31:6]  : mtvt_q;
       utvec_n = '0;  // Not used if PULP_SECURE == 0
       pmp_reg_n.pmpaddr = '0;  // Not used if PULP_SECURE == 0
       pmp_reg_n.pmpcfg_packed = '0;  // Not used if PULP_SECURE == 0
@@ -974,6 +993,10 @@ module cv32e40px_cs_registers
         if (csr_we_int) begin
           mtvec_n      = csr_wdata_int[31:8];
           mtvec_mode_n = {1'b0, csr_wdata_int[0]};  // Only direct and vectored mode are supported
+        end
+        CSR_MTVT:
+        if (csr_we_int) begin
+          mtvt_n       = csr_wdata_int[31:8];
         end
         // mscratch: machine scratch
         CSR_MSCRATCH:
@@ -1112,6 +1135,8 @@ module cv32e40px_cs_registers
 
   assign mtvec_o = mtvec_q;
   assign utvec_o = utvec_q;
+  assign mtvt_o  = mtvt_q;
+  assign utvt_o  = utvt_q; // TODO: tie to zero
   assign mtvec_mode_o = mtvec_mode_q;
   assign utvec_mode_o = utvec_mode_q;
 
@@ -1155,12 +1180,14 @@ module cv32e40px_cs_registers
           ucause_q     <= '0;
           utvec_q      <= '0;
           utvec_mode_q <= MTVEC_MODE;
+          utvt_q       <= '0;
           priv_lvl_q   <= PRIV_LVL_M;
         end else begin
           uepc_q       <= uepc_n;
           ucause_q     <= ucause_n;
           utvec_q      <= utvec_n;
           utvec_mode_q <= utvec_mode_n;
+          utvt_q       <= '0;
           priv_lvl_q   <= priv_lvl_n;
         end
       end
@@ -1170,6 +1197,7 @@ module cv32e40px_cs_registers
       assign ucause_q     = '0;
       assign utvec_q      = '0;
       assign utvec_mode_q = '0;
+      assign utvt_q       = '0;
       assign priv_lvl_q   = PRIV_LVL_M;
     end
   endgenerate
@@ -1207,6 +1235,7 @@ module cv32e40px_cs_registers
       mscratch_q <= '0;
       mie_q <= '0;
       mtvec_q <= '0;
+      mtvt_q  <= '0;
       mtvec_mode_q <= MTVEC_MODE;
     end else begin
       // update CSRs
@@ -1238,6 +1267,7 @@ module cv32e40px_cs_registers
       mscratch_q   <= mscratch_n;
       mie_q        <= mie_n;
       mtvec_q      <= mtvec_n;
+      mtvt_q       <= mtvt_n;
       mtvec_mode_q <= mtvec_mode_n;
     end
   end

@@ -289,6 +289,7 @@ package cv32e40px_pkg;
     CSR_MISA    = 12'h301,
     CSR_MIE     = 12'h304,
     CSR_MTVEC   = 12'h305,
+    CSR_MTVT    = 12'h307,
 
     // Performance counters
     CSR_MCOUNTEREN    = 12'h306,

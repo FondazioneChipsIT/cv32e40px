@@ -31,7 +31,10 @@ module cv32e40px_if_stage #(
     parameter PULP_OBI = 0,  // Legacy PULP OBI behavior
     parameter PULP_SECURE = 0,
     parameter FPU = 0,
-    parameter ZFINX = 0
+    parameter ZFINX = 0,
+    parameter CLIC = 1,
+    parameter CLIC_SHV = 1,
+    parameter NUM_INTERRUPTS = 32
 ) (
     input logic clk,
     input logic rst_n,
@@ -39,6 +42,12 @@ module cv32e40px_if_stage #(
     // Used to calculate the exception offsets
     input logic [23:0] m_trap_base_addr_i,
     input logic [23:0] u_trap_base_addr_i,
+    input logic [23:0] m_trap_base_addr_clic_shv_i,
+    input logic [23:0] u_trap_base_addr_clic_shv_i,
+    // Interrupts Selective Hardware Vectoring
+    input logic  irq_shv_i,
+    output logic minhv_o,
+
     input logic [ 1:0] trap_addr_mux_i,
     // Boot address
     input logic [31:0] boot_addr_i,
@@ -88,7 +97,8 @@ module cv32e40px_if_stage #(
 
     input  logic [4:0] m_exc_vec_pc_mux_i,  // selects ISR address for vectorized interrupt lines
     input  logic [4:0] u_exc_vec_pc_mux_i,  // selects ISR address for vectorized interrupt lines
-    output logic       csr_mtvec_init_o,  // tell CS regfile to init mtvec
+    output logic       csr_mtvec_init_o,    // tell CS regfile to init mtvec
+    output logic       csr_mtvt_init_o,     // tell CS regfile to init mtvt
 
     // jump and branch target and decision
     input logic [31:0] jump_target_id_i,  // jump target address
@@ -139,9 +149,12 @@ module cv32e40px_if_stage #(
   // exception PC selection mux
   always_comb begin : EXC_PC_MUX
     unique case (trap_addr_mux_i)
-      TRAP_MACHINE: trap_base_addr = m_trap_base_addr_i;
-      TRAP_USER:    trap_base_addr = u_trap_base_addr_i;
-      default:      trap_base_addr = m_trap_base_addr_i;
+      TRAP_MACHINE:  trap_base_addr = (CLIC && CLIC_SHV && irq_shv_i) ?
+                                      m_trap_base_addr_clic_shv_i : m_trap_base_addr_i;
+      TRAP_USER:     trap_base_addr = (CLIC && CLIC_SHV && irq_shv_i) ?
+                                      u_trap_base_addr_clic_shv_i : u_trap_base_addr_i;
+      default:       trap_base_addr = (CLIC && CLIC_SHV && irq_shv_i) ?
+                                      m_trap_base_addr_clic_shv_i : m_trap_base_addr_i;
     endcase
 
     unique case (trap_addr_mux_i)
@@ -164,23 +177,32 @@ module cv32e40px_if_stage #(
   always_comb begin
     // Default assign PC_BOOT (should be overwritten in below case)
     branch_addr_n = {boot_addr_i[31:2], 2'b0};
+    minhv_o       = 1'b0;
 
     unique case (pc_mux_i)
-      PC_BOOT: branch_addr_n = {boot_addr_i[31:2], 2'b0};
-      PC_JUMP: branch_addr_n = jump_target_id_i;
-      PC_BRANCH: branch_addr_n = jump_target_ex_i;
-      PC_EXCEPTION: branch_addr_n = exc_pc;  // set PC to exception handler
-      PC_MRET: branch_addr_n = mepc_i;  // PC is restored when returning from IRQ/exception
-      PC_URET: branch_addr_n = uepc_i;  // PC is restored when returning from IRQ/exception
-      PC_DRET: branch_addr_n = depc_i;  //
-      PC_FENCEI: branch_addr_n = pc_id_o + 4;  // jump to next instr forces prefetch buffer reload
-      PC_HWLOOP: branch_addr_n = hwlp_target_i;
+      PC_BOOT:      begin branch_addr_n = {boot_addr_i[31:2], 2'b0}; minhv_o = 1'b0; end
+      PC_JUMP:      begin branch_addr_n = jump_target_id_i; minhv_o = 1'b0; end
+      PC_BRANCH:    begin branch_addr_n = jump_target_ex_i; minhv_o = 1'b0; end
+      PC_EXCEPTION: begin
+        if (CLIC && CLIC_SHV && irq_shv_i) begin
+          branch_addr_n = exc_pc;
+          minhv_o = 1'b1;
+        end else
+          branch_addr_n = exc_pc; // set PC to exception handler
+      end
+      PC_MRET:      begin branch_addr_n = mepc_i; minhv_o = 1'b0; end // PC is restored when returning from IRQ/exception
+      PC_URET:      begin branch_addr_n = uepc_i; minhv_o = 1'b0; end // PC is restored when returning from IRQ/exception
+      PC_DRET:      begin branch_addr_n = depc_i; minhv_o = 1'b0; end //
+      PC_FENCEI:    begin branch_addr_n = pc_id_o + 4; minhv_o = 1'b0; end // jump to next instr forces prefetch buffer reload
+      PC_HWLOOP:    begin branch_addr_n = hwlp_target_i; minhv_o = 1'b0; end
       default: ;
     endcase
   end
 
   // tell CS register file to initialize mtvec on boot
   assign csr_mtvec_init_o = (pc_mux_i == PC_BOOT) & pc_set_i;
+  // tell CS register file to initialize mtvt on boot
+  assign csr_mtvt_init_o = (pc_mux_i == PC_BOOT) & pc_set_i;
 
   assign fetch_failed    = 1'b0; // PMP is not supported in CV32E40P
 

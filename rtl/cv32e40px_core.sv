@@ -39,7 +39,9 @@ module cv32e40px_core
     parameter FPU_ADDMUL_LAT = 0,  // Floating-Point ADDition/MULtiplication lane pipeline registers number
     parameter FPU_OTHERS_LAT = 0,  // Floating-Point COMParison/CONVersion lanes pipeline registers number
     parameter ZFINX = 0,  // Float-in-General Purpose registers
-    parameter NUM_MHPMCOUNTERS = 1
+    parameter NUM_MHPMCOUNTERS = 1,
+    parameter CLIC = 0,  // Core Local Interrupt Controller
+    parameter NUM_INTERRUPTS = 32
 ) (
     // Clock and Reset
     input logic clk_i,
@@ -51,6 +53,7 @@ module cv32e40px_core
     // Core ID, Cluster ID, debug mode halt address and boot address are considered more or less static
     input logic [31:0] boot_addr_i,
     input logic [31:0] mtvec_addr_i,
+    input logic [31:0] mtvt_addr_i,
     input logic [31:0] dm_halt_addr_i,
     input logic [31:0] hart_id_i,
     input logic [31:0] dm_exception_addr_i,
@@ -121,7 +124,9 @@ module cv32e40px_core
 
 
     // Interrupt inputs
-    input  logic [31:0] irq_i,  // CLINT interrupts + CLINT extension interrupts
+    input  logic [31:0] irq_i,       // CLINT interrupts + CLINT extension interrupts
+    input  logic        irq_shv_i,   // CLIC selective hardware vectoring
+    input  logic [ 7:0] irq_level_i, // CLIC interrupt level
     output logic        irq_ack_o,
     output logic [ 4:0] irq_id_o,
 
@@ -150,6 +155,9 @@ module cv32e40px_core
   // will re-introduce combinatorial paths from instr_rvalid_i to instr_req_o and from from data_rvalid_i
   // to data_req_o
   localparam PULP_OBI = 0;
+
+  // CLIC SHV support (0 -> not implemented, 1 -> implemented)
+  localparam CLIC_SHV = 1;
 
   // Unused signals related to above unused parameters
   // Left in code (with their original _i, _o postfixes) for future design extensions;
@@ -289,6 +297,7 @@ module cv32e40px_core
   logic                                     csr_access_ex;
   csr_opcode_e                              csr_op_ex;
   logic [23:0] mtvec, utvec;
+  logic [23:0] mtvt, utvt;
   logic        [ 1:0] mtvec_mode;
   logic        [ 1:0] utvec_mode;
 
@@ -337,6 +346,7 @@ module cv32e40px_core
   logic [31:0] mepc, uepc, depc;
   logic [             31:0]       mie_bypass;
   logic [             31:0]       mip;
+  logic minhv;
 
   logic                           csr_save_cause;
   logic                           csr_save_if;
@@ -347,6 +357,7 @@ module cv32e40px_core
   logic                           csr_restore_uret_id;
   logic                           csr_restore_dret_id;
   logic                           csr_mtvec_init;
+  logic                           csr_mtvt_init;
 
   // HPM related control signals
   logic [             31:0]       mcounteren;
@@ -402,8 +413,10 @@ module cv32e40px_core
   logic                           instr_err_pmp;
 
   // Mux selector for vectored IRQ PC
-  assign m_exc_vec_pc_mux_id = (mtvec_mode == 2'b0) ? 5'h0 : exc_cause;
-  assign u_exc_vec_pc_mux_id = (utvec_mode == 2'b0) ? 5'h0 : exc_cause;
+  assign m_exc_vec_pc_mux_id = ((!CLIC && mtvec_mode == 2'h1) || (CLIC && CLIC_SHV && irq_shv_i))
+    ? exc_cause : {($clog2(NUM_INTERRUPTS)){1'b0}}; //TODO CLIC==1 <=> mtvec_mode==2'b11, remove CLIC elab param
+  assign u_exc_vec_pc_mux_id = ((!CLIC && utvec_mode == 2'h1) || (CLIC && CLIC_SHV && irq_shv_i))
+    ? exc_cause : {($clog2(NUM_INTERRUPTS)){1'b0}};
 
   // PULP_SECURE == 0
   assign irq_sec_i = 1'b0;
@@ -472,7 +485,10 @@ module cv32e40px_core
       .PULP_OBI   (PULP_OBI),
       .PULP_SECURE(PULP_SECURE),
       .FPU        (FPU),
-      .ZFINX      (ZFINX)
+      .ZFINX      (ZFINX),
+      .CLIC       (CLIC),
+      .CLIC_SHV   (CLIC_SHV),
+      .NUM_INTERRUPTS(NUM_INTERRUPTS)
   ) if_stage_i (
       .clk  (clk),
       .rst_n(rst_ni),
@@ -487,6 +503,13 @@ module cv32e40px_core
       // trap vector location
       .m_trap_base_addr_i(mtvec),
       .u_trap_base_addr_i(utvec),
+      .m_trap_base_addr_clic_shv_i(mtvt),
+      .u_trap_base_addr_clic_shv_i(utvt),
+
+      // selective hardware vectoring
+      .irq_shv_i(irq_shv_i),
+      .minhv_o  (minhv),
+
       .trap_addr_mux_i   (trap_addr_mux),
 
       // instruction request control
@@ -537,6 +560,7 @@ module cv32e40px_core
       .u_exc_vec_pc_mux_i(u_exc_vec_pc_mux_id),
 
       .csr_mtvec_init_o(csr_mtvec_init),
+      .csr_mtvt_init_o (csr_mtvt_init),
 
       // from hwloop registers
       .hwlp_jump_i  (hwlp_jump),
@@ -1059,8 +1083,10 @@ module cv32e40px_core
       .N_PMP_ENTRIES   (N_PMP_ENTRIES),
       .NUM_MHPMCOUNTERS(NUM_MHPMCOUNTERS),
       .COREV_PULP      (COREV_PULP),
-      .COREV_CLUSTER   (COREV_CLUSTER),
-      .DEBUG_TRIGGER_EN(DEBUG_TRIGGER_EN)
+      .COREV_CLUSTER   (COREV_CLUSTER),      
+      .DEBUG_TRIGGER_EN(DEBUG_TRIGGER_EN),
+      .CLIC            (CLIC),
+      .NUM_INTERRUPTS  (NUM_INTERRUPTS)
   ) cs_registers_i (
       .clk  (clk),
       .rst_n(rst_ni),
@@ -1069,12 +1095,16 @@ module cv32e40px_core
       .hart_id_i       (hart_id_i),
       .mtvec_o         (mtvec),
       .utvec_o         (utvec),
+      .mtvt_o          (mtvt),
+      .utvt_o          (utvt),
       .mtvec_mode_o    (mtvec_mode),
       .utvec_mode_o    (utvec_mode),
       // mtvec address
       .mtvec_addr_i    (mtvec_addr_i[31:0]),
       .csr_mtvec_init_i(csr_mtvec_init),
       // Interface to CSRs (SRAM like)
+      .mtvt_addr_i     (mtvt_addr_i[31:0]),
+      .csr_mtvt_init_i (csr_mtvt_init),
       .csr_addr_i      (csr_addr),
       .csr_wdata_i     (csr_wdata),
       .csr_op_i        (csr_op),

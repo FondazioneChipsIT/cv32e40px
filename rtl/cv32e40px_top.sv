@@ -33,7 +33,8 @@ module cv32e40px_top
     parameter FPU_ADDMUL_LAT = 0,  // Floating-Point ADDition/MULtiplication computing lane pipeline registers number
     parameter FPU_OTHERS_LAT = 0,  // Floating-Point COMParison/CONVersion computing lanes pipeline registers number
     parameter ZFINX = 0,  // Float-in-General Purpose registers
-    parameter NUM_MHPMCOUNTERS = 1
+    parameter NUM_MHPMCOUNTERS = 1,
+    parameter CLIC = 0  // Core Local Interrupt Controller
 ) (
     // Clock and Reset
     input logic clk_i,
@@ -45,6 +46,7 @@ module cv32e40px_top
     // Core ID, Cluster ID, debug mode halt address and boot address are considered more or less static
     input logic [31:0] boot_addr_i,
     input logic [31:0] mtvec_addr_i,
+    input logic [31:0] mtvt_addr_i,
     input logic [31:0] dm_halt_addr_i,
     input logic [31:0] hart_id_i,
     input logic [31:0] dm_exception_addr_i,
@@ -100,6 +102,8 @@ module cv32e40px_top
 
     // Interrupt inputs
     input  logic [31:0] irq_i,  // CLINT interrupts + CLINT extension interrupts
+    input  logic        irq_shv_i,  // CLIC selective hardware vectoring
+    input  logic [ 7:0] irq_level_i,  // CLIC interrupt level
     output logic        irq_ack_o,
     output logic [ 4:0] irq_id_o,
 
@@ -140,7 +144,8 @@ module cv32e40px_top
       .FPU_ADDMUL_LAT  (FPU_ADDMUL_LAT),
       .FPU_OTHERS_LAT  (FPU_OTHERS_LAT),
       .ZFINX           (ZFINX),
-      .NUM_MHPMCOUNTERS(NUM_MHPMCOUNTERS)
+      .NUM_MHPMCOUNTERS(NUM_MHPMCOUNTERS),
+      .CLIC            (CLIC)
   ) core_i (
       .clk_i (clk_i),
       .rst_ni(rst_ni),
@@ -150,6 +155,7 @@ module cv32e40px_top
 
       .boot_addr_i        (boot_addr_i),
       .mtvec_addr_i       (mtvec_addr_i),
+      .mtvt_addr_i        (mtvt_addr_i),
       .dm_halt_addr_i     (dm_halt_addr_i),
       .hart_id_i          (hart_id_i),
       .dm_exception_addr_i(dm_exception_addr_i),
@@ -211,9 +217,11 @@ module cv32e40px_top
       .x_result_ready_o(x_result_ready_o),
       .x_result_i(x_result_i),
 
-      .irq_i    (irq_i),
-      .irq_ack_o(irq_ack_o),
-      .irq_id_o (irq_id_o),
+      .irq_i      (irq_i),
+      .irq_shv_i  (irq_shv_i),
+      .irq_level_i(irq_level_i),
+      .irq_ack_o  (irq_ack_o),
+      .irq_id_o   (irq_id_o),
 
       .debug_req_i      (debug_req_i),
       .debug_havereset_o(debug_havereset_o),
