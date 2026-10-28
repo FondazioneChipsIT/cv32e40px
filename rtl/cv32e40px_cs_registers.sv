@@ -795,7 +795,7 @@ module cv32e40px_cs_registers
       exception_pc            = pc_id_i;
       priv_lvl_n              = priv_lvl_q;
       mtvec_n                 = csr_mtvec_init_i ? mtvec_addr_i[31:8] : mtvec_q;
-      mtvt_n                  = csr_mtvt_init_i  ? mtvt_addr_i[31:6]  : mtvt_q;
+      mtvt_n                  = csr_mtvt_init_i  ? mtvt_addr_i[31:8]  : mtvt_q;
       utvec_n                 = utvec_q;
       utvt_n                  = utvt_q;
       mtvec_mode_n            = mtvec_mode_q;
@@ -1183,7 +1183,7 @@ module cv32e40px_cs_registers
       exception_pc = pc_id_i;
       priv_lvl_n = priv_lvl_q;
       mtvec_n = csr_mtvec_init_i ? mtvec_addr_i[31:8] : mtvec_q;
-      mtvt_n  = csr_mtvt_init_i  ? mtvt_addr_i[31:6]  : mtvt_q;
+      mtvt_n  = csr_mtvt_init_i  ? mtvt_addr_i[31:8]  : mtvt_q;
       utvec_n = '0;  // Not used if PULP_SECURE == 0
       utvt_n = '0;  // Not used if PULP_SECURE == 0
       pmp_reg_n.pmpaddr = '0;  // Not used if PULP_SECURE == 0
