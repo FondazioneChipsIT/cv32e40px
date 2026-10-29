@@ -91,6 +91,9 @@ module cv32e40px_cs_registers
     //mcounteren_o is always 0 if PULP_SECURE is zero
     output logic [31:0] mcounteren_o,
 
+    // Interrupts Selective Hardware Vectoring
+    input logic minhv_i,
+
     // debug
     input  logic        debug_mode_i,
     input  logic [ 2:0] debug_cause_i,
@@ -120,7 +123,7 @@ module cv32e40px_cs_registers
 
     input logic                    csr_restore_dret_i,
     //coming from controller
-    input logic [       5:0]       csr_cause_i,
+    input logic [$clog2(NUM_INTERRUPTS):0] csr_cause_i,
     //coming from controller
     input logic                    csr_save_cause_i,
     // Hardware loops
@@ -222,8 +225,8 @@ module cv32e40px_cs_registers
   Status_t mstatus_q, mstatus_n;
   logic mstatus_we_int;
   FS_t mstatus_fs_q, mstatus_fs_n;
-  logic [5:0] mcause_q, mcause_n;
-  logic [5:0] ucause_q, ucause_n;
+  logic [$clog2(NUM_INTERRUPTS):0] mcause_q, mcause_n;
+  logic [$clog2(NUM_INTERRUPTS):0] ucause_q, ucause_n;
   logic [23:0] mtvec_n, mtvec_q;
   logic [23:0] utvec_n, utvec_q;
   logic [23:0] mtvt_n, mtvt_q;
@@ -233,6 +236,9 @@ module cv32e40px_cs_registers
 
   logic [31:0] mip;  // Bits are masked according to IRQ_MASK
   logic [31:0] mie_q, mie_n;  // Bits are masked according to IRQ_MASK
+
+  logic [7:0]  mpil_n, mpil_q;
+  logic        minhv_n, minhv_q;
 
   logic [31:0] csr_mie_wdata;
   logic        csr_mie_we;
@@ -255,7 +261,7 @@ module cv32e40px_cs_registers
   logic [31:0] mhpmcounter_write_upper;  // write 32 upper bits mhpmcounter_q
   logic [31:0] mhpmcounter_write_increment;  // write increment of mhpmcounter_q
 
-  assign is_irq = csr_cause_i[5];
+  assign is_irq = csr_cause_i[$clog2(NUM_INTERRUPTS)];
 
   // mip CSR
   assign mip = mip_i;
@@ -338,7 +344,19 @@ module cv32e40px_cs_registers
         // mepc: exception program counter
         CSR_MEPC: csr_rdata_int = mepc_q;
         // mcause: exception cause
-        CSR_MCAUSE: csr_rdata_int = {mcause_q[5], 26'b0, mcause_q[4:0]};
+        CSR_MCAUSE:
+        if (CLIC) begin
+          csr_rdata_int[31]    = mcause_q[$clog2(NUM_INTERRUPTS)];
+          csr_rdata_int[30]    = minhv_q; // TODO:
+          csr_rdata_int[29:28] = mstatus_q.mpp[1:0];
+          csr_rdata_int[27]    = mstatus_q.mpie;
+          csr_rdata_int[26:24] = '0; // reserved
+          csr_rdata_int[23:16] = mpil_q;
+          csr_rdata_int[15:12] = '0; // reserved
+          csr_rdata_int[11:$clog2(NUM_INTERRUPTS)]  = '0; // TODO: when more interrupt lines
+          csr_rdata_int[$clog2(NUM_INTERRUPTS)-1:0]   = mcause_q[$clog2(NUM_INTERRUPTS)-1:0];
+        end else
+          csr_rdata_int = {mcause_q[$clog2(NUM_INTERRUPTS)], {(32-$clog2(NUM_INTERRUPTS)-1){1'b0}}, mcause_q[$clog2(NUM_INTERRUPTS)-1:0]};
         // mip: interrupt pending
         CSR_MIP: begin
           csr_rdata_int = mip;
@@ -506,7 +524,19 @@ module cv32e40px_cs_registers
         // mepc: exception program counter
         CSR_MEPC: csr_rdata_int = mepc_q;
         // mcause: exception cause
-        CSR_MCAUSE: csr_rdata_int = {mcause_q[5], 26'b0, mcause_q[4:0]};
+        CSR_MCAUSE:
+        if (CLIC) begin
+          csr_rdata_int[31]    = mcause_q[$clog2(NUM_INTERRUPTS)];
+          csr_rdata_int[30]    = minhv_q; // TODO: implement
+          csr_rdata_int[29:28] = mstatus_q.mpp[1:0];
+          csr_rdata_int[27]    = mstatus_q.mpie;
+          csr_rdata_int[26:24] = '0; // reserved
+          csr_rdata_int[23:16] = mpil_q;
+          csr_rdata_int[15:12] = '0; // reserved
+          csr_rdata_int[11:$clog2(NUM_INTERRUPTS)]  = '0; // TODO: when more interrupt lines
+          csr_rdata_int[$clog2(NUM_INTERRUPTS)-1:0]   = mcause_q[$clog2(NUM_INTERRUPTS)-1:0];
+        end else
+          csr_rdata_int = {mcause_q[$clog2(NUM_INTERRUPTS)], {(32-$clog2(NUM_INTERRUPTS)-1){1'b0}}, mcause_q[$clog2(NUM_INTERRUPTS)-1:0]};
         // mip: interrupt pending
         CSR_MIP: begin
           csr_rdata_int = mip;
@@ -644,6 +674,8 @@ module cv32e40px_cs_registers
       pmpcfg_we               = '0;
 
       mie_n                   = mie_q;
+      mpil_n                  = mpil_q;
+      minhv_n                 = minhv_q;
 
       if (FPU == 1) if (fflags_we_i) fflags_n = fflags_i | fflags_q;
 
@@ -695,7 +727,21 @@ module cv32e40px_cs_registers
           mepc_n = csr_wdata_int & ~32'b1;  // force 16-bit alignment
         end
         // mcause
-        CSR_MCAUSE: if (csr_we_int) mcause_n = {csr_wdata_int[31], csr_wdata_int[4:0]};
+        CSR_MCAUSE:
+        if (csr_we_int) begin
+          if (CLIC) begin
+            mcause_n[$clog2(NUM_INTERRUPTS)] = csr_wdata_int[31];
+            minhv_n            = minhv_i; //csr_wdata_int[30];
+            mstatus_n.mpp[1:0] = csr_wdata_int[29:28];
+            mstatus_n.mpie     = csr_wdata_int[27];
+            //csr_wdata_int[26:24]; // reserved
+            mpil_n             = csr_wdata_int[23:16]; //TODO
+            //csr_wdata_int[15:12]; // reserved
+            //csr_wdata_int[11:$clog2(NUM_INTERRUPTS)]; // TODO: when more interrupt lines
+            mcause_n[$clog2(NUM_INTERRUPTS)-1:0] = csr_wdata_int[$clog2(NUM_INTERRUPTS)-1:0]; // Excode (interrupt ID)
+          end else
+            mcause_n = {csr_wdata_int[31], csr_wdata_int[$clog2(NUM_INTERRUPTS)-1:0]};
+        end
 
         // Debug
         CSR_DCSR:
@@ -933,6 +979,9 @@ module cv32e40px_cs_registers
       pmpcfg_we = '0;
 
       mie_n = mie_q;
+      mpil_n = mpil_q;
+      minhv_n = minhv_q;
+
       mtvec_mode_n = mtvec_mode_q;
       utvec_mode_n = '0;  // Not used if PULP_SECURE == 0
 
@@ -1009,7 +1058,21 @@ module cv32e40px_cs_registers
           mepc_n = csr_wdata_int & ~32'b1;  // force 16-bit alignment
         end
         // mcause
-        CSR_MCAUSE: if (csr_we_int) mcause_n = {csr_wdata_int[31], csr_wdata_int[4:0]};
+        CSR_MCAUSE:
+        if (csr_we_int) begin
+          if (CLIC) begin
+            mcause_n[$clog2(NUM_INTERRUPTS)] = csr_wdata_int[31];
+            minhv_n            = csr_wdata_int[30]; // TODO: implement
+            mstatus_n.mpp[1:0] = csr_wdata_int[29:28];
+            mstatus_n.mpie     = csr_wdata_int[27];
+            //csr_wdata_int[26:24]; // reserved
+            mpil_n             = csr_wdata_int[23:16]; //TODO
+            //csr_wdata_int[15:12]; // reserved
+            //csr_wdata_int[11:$clog2(NUM_INTERRUPTS)];  // TODO: when more interrupt lines
+            mcause_n[$clog2(NUM_INTERRUPTS)-1:0] = csr_wdata_int[$clog2(NUM_INTERRUPTS)-1:0];
+          end else
+            mcause_n = {csr_wdata_int[31], csr_wdata_int[$clog2(NUM_INTERRUPTS)-1:0]};
+        end
 
         CSR_DCSR:
         if (csr_we_int) begin
@@ -1237,6 +1300,8 @@ module cv32e40px_cs_registers
       mtvec_q <= '0;
       mtvt_q  <= '0;
       mtvec_mode_q <= MTVEC_MODE;
+      mpil_q <= '0;
+      minhv_q <= '0;
     end else begin
       // update CSRs
       if (FPU == 1) begin
@@ -1269,6 +1334,8 @@ module cv32e40px_cs_registers
       mtvec_q      <= mtvec_n;
       mtvt_q       <= mtvt_n;
       mtvec_mode_q <= mtvec_mode_n;
+      mpil_q       <= mpil_n;
+      minhv_q      <= minhv_n;
     end
   end
   ////////////////////////////////////////////////////////////////////////

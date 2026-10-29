@@ -1129,6 +1129,9 @@ module cv32e40px_core
       // HPM related control signals
       .mcounteren_o(mcounteren),
 
+      // Interrupts Selective Hardware Vectoring
+      .minhv_i(minhv),
+
       // debug
       .debug_mode_i       (debug_mode),
       .debug_cause_i      (debug_cause),
