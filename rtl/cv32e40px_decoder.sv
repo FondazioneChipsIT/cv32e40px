@@ -2815,6 +2815,7 @@ module cv32e40px_decoder
               CSR_MCAUSE,
               CSR_MINTTHRESH, // TODO: do we need to treat this as status reg? // TODO: gate when CLIC = 0
               CSR_MINTSTATUS,
+              CSR_MSHWINT,
               CSR_MNXTI,
               CSR_JALMNXTI,
               CSR_MNXTICFG:

@@ -33,6 +33,7 @@ sources:
     - rtl/cv32e40px_aligner.sv
     - rtl/cv32e40px_compressed_decoder.sv
     - rtl/cv32e40px_controller.sv
+    - rtl/cv32e40px_shadow_controller.sv
     - rtl/cv32e40px_cs_registers.sv
     - rtl/cv32e40px_decoder.sv
     - rtl/cv32e40px_int_controller.sv

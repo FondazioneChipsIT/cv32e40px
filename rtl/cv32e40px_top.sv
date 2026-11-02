@@ -36,7 +36,8 @@ module cv32e40px_top
     parameter NUM_MHPMCOUNTERS = 1,
     parameter CLIC = 0,  // Core Local Interrupt Controller
     parameter MCLICBASE_ADDR = 32'h1A200000,  // Base address for CLIC memory mapped registers
-    parameter NUM_INTERRUPTS = 32
+    parameter NUM_INTERRUPTS = 32,
+    parameter SHADOW = 0
 ) (
     // Clock and Reset
     input logic clk_i,
@@ -69,6 +70,16 @@ module cv32e40px_top
     output logic [31:0] data_addr_o,
     output logic [31:0] data_wdata_o,
     input  logic [31:0] data_rdata_i,
+
+    // shadow store memory interface
+    output logic        shadow_req_o,
+    input  logic        shadow_gnt_i,
+    input  logic        shadow_rvalid_i,
+    output logic        shadow_we_o,
+    output logic [ 3:0] shadow_be_o,
+    output logic [31:0] shadow_addr_o,
+    output logic [31:0] shadow_wdata_o,
+    input  logic [31:0] shadow_rdata_i,
 
     // CORE-V-XIF
     // Compressed interface
@@ -139,17 +150,18 @@ module cv32e40px_top
 
   // Instantiate the Core
   cv32e40px_core #(
-      .COREV_X_IF      (COREV_X_IF),
-      .COREV_PULP      (COREV_PULP),
-      .COREV_CLUSTER   (COREV_CLUSTER),
-      .FPU             (FPU),
-      .FPU_ADDMUL_LAT  (FPU_ADDMUL_LAT),
-      .FPU_OTHERS_LAT  (FPU_OTHERS_LAT),
-      .ZFINX           (ZFINX),
-      .NUM_MHPMCOUNTERS(NUM_MHPMCOUNTERS),
-      .CLIC            (CLIC),
-      .MCLICBASE_ADDR  (MCLICBASE_ADDR),
-      .NUM_INTERRUPTS  (NUM_INTERRUPTS)
+      .COREV_X_IF       (COREV_X_IF      ),
+      .COREV_PULP       (COREV_PULP      ),
+      .COREV_CLUSTER    (COREV_CLUSTER   ),
+      .FPU              (FPU             ),
+      .FPU_ADDMUL_LAT   (FPU_ADDMUL_LAT  ),
+      .FPU_OTHERS_LAT   (FPU_OTHERS_LAT  ),
+      .ZFINX            (ZFINX           ),
+      .NUM_MHPMCOUNTERS (NUM_MHPMCOUNTERS),
+      .CLIC             (CLIC            ),
+      .MCLICBASE_ADDR   (MCLICBASE_ADDR  ),
+      .NUM_INTERRUPTS   (NUM_INTERRUPTS  ),
+      .SHADOW           (SHADOW          )
   ) core_i (
       .clk_i (clk_i),
       .rst_ni(rst_ni),
@@ -178,6 +190,15 @@ module cv32e40px_top
       .data_addr_o  (data_addr_o),
       .data_wdata_o (data_wdata_o),
       .data_rdata_i (data_rdata_i),
+
+      .shadow_req_o    (shadow_req_o   ),
+      .shadow_gnt_i    (shadow_gnt_i   ),
+      .shadow_rvalid_i (shadow_rvalid_i),
+      .shadow_we_o     (shadow_we_o    ),
+      .shadow_be_o     (shadow_be_o    ),
+      .shadow_addr_o   (shadow_addr_o  ),
+      .shadow_wdata_o  (shadow_wdata_o ),
+      .shadow_rdata_i  (shadow_rdata_i ),
 
       .apu_busy_o    (apu_busy),
       .apu_req_o     (apu_req),

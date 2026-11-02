@@ -52,6 +52,7 @@ ${DESIGN_RTL_DIR}/cv32e40px_ff_one.sv
 ${DESIGN_RTL_DIR}/cv32e40px_popcnt.sv
 ${DESIGN_RTL_DIR}/cv32e40px_apu_disp.sv
 ${DESIGN_RTL_DIR}/cv32e40px_controller.sv
+${DESIGN_RTL_DIR}/cv32e40px_shadow_controller.sv
 ${DESIGN_RTL_DIR}/cv32e40px_obi_interface.sv
 ${DESIGN_RTL_DIR}/cv32e40px_prefetch_controller.sv
 ${DESIGN_RTL_DIR}/cv32e40px_sleep_unit.sv

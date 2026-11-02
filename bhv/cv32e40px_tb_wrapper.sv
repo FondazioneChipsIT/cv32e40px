@@ -59,7 +59,8 @@ module cv32e40px_tb_wrapper
     parameter NUM_MHPMCOUNTERS = 1,
     parameter CLIC = 0,  // Core Local Interrupt Controller
     parameter MCLICBASE_ADDR = 32'h1A200000,  // Base address for CLIC memory mapped registers
-    parameter NUM_INTERRUPTS = 32
+    parameter NUM_INTERRUPTS = 32,
+    parameter SHADOW = 0
 ) (
     // Clock and Reset
     input logic clk_i,
@@ -92,6 +93,16 @@ module cv32e40px_tb_wrapper
     output logic [31:0] data_addr_o,
     output logic [31:0] data_wdata_o,
     input  logic [31:0] data_rdata_i,
+
+    // shadow store memory interface
+    output logic        shadow_req_o,
+    input  logic        shadow_gnt_i,
+    input  logic        shadow_rvalid_i,
+    output logic        shadow_we_o,
+    output logic [ 3:0] shadow_be_o,
+    output logic [31:0] shadow_addr_o,
+    output logic [31:0] shadow_wdata_o,
+    input  logic [31:0] shadow_rdata_i,
 
     // Interrupt inputs
     input  logic [NUM_INTERRUPTS-1:0] irq_i,  // CLINT interrupts + CLINT extension interrupts
@@ -513,7 +524,8 @@ module cv32e40px_tb_wrapper
       .NUM_MHPMCOUNTERS(NUM_MHPMCOUNTERS),
       .CLIC            (CLIC),
       .MCLICBASE_ADDR  (MCLICBASE_ADDR),
-      .NUM_INTERRUPTS  (NUM_INTERRUPTS)
+      .NUM_INTERRUPTS  (NUM_INTERRUPTS),
+      .SHADOW          (SHADOW)
   ) cv32e40px_top_i (
       .clk_i (clk_i),
       .rst_ni(rst_ni),
@@ -542,6 +554,15 @@ module cv32e40px_tb_wrapper
       .data_addr_o  (data_addr_o),
       .data_wdata_o (data_wdata_o),
       .data_rdata_i (data_rdata_i),
+
+      .shadow_req_o    (shadow_req_o),
+      .shadow_gnt_i    (shadow_gnt_i),
+      .shadow_rvalid_i (shadow_rvalid_i),
+      .shadow_we_o     (shadow_we_o),
+      .shadow_be_o     (shadow_be_o),
+      .shadow_addr_o   (shadow_addr_o),
+      .shadow_wdata_o  (shadow_wdata_o),
+      .shadow_rdata_i  (shadow_rdata_i),
 
       .irq_i      (irq_i),
       .irq_shv_i  (irq_shv_i),

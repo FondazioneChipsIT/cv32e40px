@@ -51,7 +51,8 @@ module cv32e40px_id_stage
     parameter APU_NUSFLAGS_CPU = 5,
     parameter DEBUG_TRIGGER_EN = 1,
     parameter CLIC = 1,
-    parameter NUM_INTERRUPTS = 32
+    parameter NUM_INTERRUPTS = 32,
+    parameter SHADOW = 0
 ) (
     input logic clk,  // Gated clock
     input logic clk_ungated_i,  // Ungated clock
@@ -296,7 +297,20 @@ module cv32e40px_id_stage
     output logic mhpmevent_pipe_stall_o,
 
     input logic        perf_imiss_i,
-    input logic [31:0] mcounteren_i
+    input logic [31:0] mcounteren_i,
+
+    input logic shadow_en_i,
+    input logic shadow_csr_save_i,
+    input logic [31:0]                     shadow_mepc_i,
+    input logic [$clog2(NUM_INTERRUPTS):0] shadow_mcause_i,
+    output logic shadow_req_o,
+    input logic shadow_gnt_i,
+    input logic shadow_rvalid_i,
+    output logic shadow_we_o,
+    output logic [3:0] shadow_be_o,
+    output logic [31:0] shadow_addr_o,
+    output logic [31:0] shadow_wdata_o,
+    input logic [31:0] shadow_rdata_i
 );
 
   // Source/Destination register instruction index
@@ -1037,13 +1051,26 @@ module cv32e40px_id_stage
   //                                                     //
   /////////////////////////////////////////////////////////
 
+  logic [5:0]  shadow_reg_raddr;
+  logic [31:0] shadow_reg_rdata;
+  logic [31:0] shadow_reg_sp;
+  logic        shadow_irq;
+  logic        shadow_ready;
+
+  // ABI = "standard": RISC-V standard integer ABI
+  // EABI = "eabi":    RISC-V embedded ABI
+  localparam ABI = "standard";
+
   cv32e40px_register_file #(
-      .ADDR_WIDTH(6),
-      .DATA_WIDTH(32),
-      .FPU       (FPU),
-      .ZFINX     (ZFINX),
-      .COREV_X_IF(COREV_X_IF),
-      .X_DUALREAD(X_DUALREAD)
+      .ADDR_WIDTH     (6             ),
+      .DATA_WIDTH     (32            ),
+      .FPU            (FPU           ),
+      .ZFINX          (ZFINX         ),
+      .COREV_X_IF     (COREV_X_IF    ),
+      .NUM_INTERRUPTS (NUM_INTERRUPTS),
+      .SHADOW         (SHADOW        ),
+      .X_DUALREAD     (X_DUALREAD    ),
+      .ABI            (ABI           )
   ) register_file_i (
       .clk  (clk),
       .rst_n(rst_n),
@@ -1072,8 +1099,55 @@ module cv32e40px_id_stage
       // Write port b
       .waddr_b_i(regfile_alu_waddr_fw_i),
       .wdata_b_i(regfile_alu_wdata_fw_i),
-      .we_b_i   (regfile_alu_we_fw_power_i)
+      .we_b_i   (regfile_alu_we_fw_power_i),
+
+      // shadow register
+      .shadow_csr_save_i (shadow_csr_save_i),
+      .shadow_mepc_i (shadow_mepc_i),
+      .shadow_mcause_i (shadow_mcause_i),
+      .shadow_save_i (shadow_irq && shadow_en_i),
+      .shadow_raddr_i (shadow_reg_raddr),
+      .shadow_rdata_o (shadow_reg_rdata),
+      .shadow_sp_o (shadow_reg_sp)
   );
+
+  if (SHADOW) begin : gen_shadow_irq
+    assign shadow_irq = irq_ack_o;
+  end else begin : gen_no_shadow_irq
+    assign shadow_irq = 1'b0;
+  end
+
+  if (SHADOW) begin : gen_shadow_controller
+    cv32e40px_shadow_controller #(
+      .ADDR_WIDTH         ( 6                ),
+      .DATA_WIDTH         ( 32               ),
+      .NUM_SHADOW_SAVES   ( ABI == "standard" ? 16 : (ABI == "eabi" ? 7 : -1) )
+    ) shadow_controller_i (
+      .clk_i              ( clk                       ),
+      .rst_ni             ( rst_n                     ),
+      .setback_i          ( 1'b0 ), // TODO: is this really needed?
+      .shadow_irq_i       ( shadow_irq && shadow_en_i ),
+      .shadow_ready_o     ( shadow_ready              ),
+      .shadow_save_level_o(), // TODO: connect
+      .shadow_reg_raddr_o ( shadow_reg_raddr          ),
+      .shadow_reg_rdata_i ( shadow_reg_rdata          ),
+      .shadow_reg_sp_i    ( shadow_reg_sp             ),
+      .shadow_req_o       ( shadow_req_o              ),
+      .shadow_gnt_i       ( shadow_gnt_i              ),
+      .shadow_rvalid_i    ( shadow_rvalid_i           ),
+      .shadow_we_o        ( shadow_we_o               ),
+      .shadow_be_o        ( shadow_be_o               ),
+      .shadow_addr_o      ( shadow_addr_o             ),
+      .shadow_wdata_o     ( shadow_wdata_o            ),
+      .shadow_rdata_i     ( shadow_rdata_i            )
+    );
+  end else begin : gen_no_shadow_controller
+    assign shadow_req_o = '0;
+    assign shadow_we_o = '0;
+    assign shadow_be_o = '0;
+    assign shadow_addr_o = '0;
+    assign shadow_wdata_o = '0;
+  end
 
   logic [1:0] x_mem_data_type_id;
 
@@ -1482,6 +1556,10 @@ module cv32e40px_id_stage
       .irq_ack_o         (irq_ack_o),
       .irq_id_o          (irq_id_o),
       .irq_level_ctrl_i  (irq_level_ctrl),
+
+      // shadow controller signals
+      .shadow_en_i       (shadow_en_i),
+      .shadow_ready_i    (shadow_ready),
 
       // Debug Signal
       .debug_mode_o          (debug_mode_o),

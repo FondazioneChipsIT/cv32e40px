@@ -509,7 +509,13 @@ package cv32e40px_pkg;
     CSR_MVENDORID = 12'hF11,
     CSR_MARCHID   = 12'hF12,
     CSR_MIMPID    = 12'hF13,
-    CSR_MHARTID   = 12'hF14
+    CSR_MHARTID   = 12'hF14,
+
+    ///////////////////////////////////////////////////////
+    // Machine Custom CSRs
+    ///////////////////////////////////////////////////////
+    // Shadow interrupt configuration
+    CSR_MSHWINT   = 12'hBC0
   } csr_num_e;
 
   // CSR operations
@@ -558,6 +564,16 @@ package cv32e40px_pkg;
     // hardwired to '0
     logic [7:0]   uil;
   } Mintstatus_t;
+
+  typedef struct packed {
+    // make lsu stall when load/store hazard possible with register being saved from shadow
+    logic        blocklw;
+    // Allow core to run ahead of shadow register saving logic. This allows for
+    // lower interrupt latency if lw/sw only accesses shadow registers that are already saved.
+    logic        runahead;
+    // enable shadow saving logic
+    logic        en;
+  } Shwint_t;
 
   typedef struct packed {
     logic uie;
