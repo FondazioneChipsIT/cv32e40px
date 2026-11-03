@@ -331,7 +331,6 @@ package cv32e40px_pkg;
     CSR_MTVAL        = 12'h343,
     CSR_MIP          = 12'h344,
     CSR_MNXTI        = 12'h345,
-    CSR_MINTSTATUS   = 12'h346,
     CSR_MINTTHRESH   = 12'h347,
     CSR_MSCRATCHCSWL = 12'h349,
     CSR_MCLICBASE    = 12'h350,
@@ -511,6 +510,9 @@ package cv32e40px_pkg;
     CSR_MARCHID   = 12'hF12,
     CSR_MIMPID    = 12'hF13,
     CSR_MHARTID   = 12'hF14,
+
+    // Machine interrupt status (clic), read-only
+    CSR_MINTSTATUS = 12'hFB1,
 
     ///////////////////////////////////////////////////////
     // Machine Custom CSRs

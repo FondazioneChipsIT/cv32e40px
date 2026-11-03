@@ -2823,13 +2823,18 @@ module cv32e40px_decoder
             // CLIC csrs exist only if CLIC = 1, otherwise they result in illegal instruction
             CSR_MTVT,
               CSR_MINTTHRESH, // TODO: do we need to treat this as status reg?
-              CSR_MINTSTATUS,
               CSR_MNXTI,
               CSR_JALMNXTI,
               CSR_MNXTICFG:
                 // Treat as status CSR for side effect handling
                 if (CLIC == 0) csr_illegal = 1'b1;
                 else           csr_status_o = 1'b1;
+
+            // mintstatus is read only and exists only if CLIC = 1
+            CSR_MINTSTATUS:
+                // Treat as status CSR for side effect handling
+                if (CLIC == 0 || csr_op != CSR_OP_READ) csr_illegal = 1'b1;
+                else                                    csr_status_o = 1'b1;
 
             // mscratchcswl exists only if CLIC = 1;
             CSR_MSCRATCHCSWL:
