@@ -361,6 +361,9 @@ module cv32e40px_core
   logic [ 7:0] mintthresh;
   Mintstatus_t mintstatus;
   logic minhv;
+  // minhv is not implemented: its input of cs_registers is tied to this signal
+  logic unused_signal;
+  assign unused_signal = 1'b0;
 
   logic       csr_save_cause;
   logic       csr_save_if;
@@ -1204,7 +1207,7 @@ module cv32e40px_core
       .mcounteren_o(mcounteren),
 
       // Interrupts Selective Hardware Vectoring
-      .minhv_i(minhv),
+      .minhv_i(unused_signal),  // unused: tied to 0, connect minhv when implemented
 
       // debug
       .debug_mode_i       (debug_mode),

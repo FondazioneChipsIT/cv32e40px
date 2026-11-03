@@ -427,7 +427,7 @@ module cv32e40px_cs_registers
         CSR_MCAUSE:
         if (CLIC) begin
           csr_rdata_int[31]    = mcause_q[$clog2(NUM_INTERRUPTS)];
-          csr_rdata_int[30]    = minhv_q; // TODO:
+          csr_rdata_int[30]    = minhv_q; // unused
           csr_rdata_int[29:28] = mstatus_q.mpp[1:0];
           csr_rdata_int[27]    = mstatus_q.mpie;
           csr_rdata_int[26:24] = '0; // reserved
@@ -647,7 +647,7 @@ module cv32e40px_cs_registers
         CSR_MCAUSE:
         if (CLIC) begin
           csr_rdata_int[31]    = mcause_q[$clog2(NUM_INTERRUPTS)];
-          csr_rdata_int[30]    = minhv_q; // TODO: implement
+          csr_rdata_int[30]    = minhv_q; // unused
           csr_rdata_int[29:28] = mstatus_q.mpp[1:0];
           csr_rdata_int[27]    = mstatus_q.mpie;
           csr_rdata_int[26:24] = '0; // reserved
@@ -922,7 +922,7 @@ module cv32e40px_cs_registers
         if (csr_we_int) begin
           if (CLIC) begin
             mcause_n[$clog2(NUM_INTERRUPTS)] = csr_wdata_int[31];
-            minhv_n            = minhv_i; //csr_wdata_int[30];
+            minhv_n            = minhv_i; // unused
             mstatus_n.mpp[1:0] = csr_wdata_int[29:28];
             mstatus_n.mpie     = csr_wdata_int[27];
             //csr_wdata_int[26:24]; // reserved
@@ -1340,7 +1340,7 @@ module cv32e40px_cs_registers
         if (csr_we_int) begin
           if (CLIC) begin
             mcause_n[$clog2(NUM_INTERRUPTS)] = csr_wdata_int[31];
-            minhv_n            = csr_wdata_int[30]; // TODO: implement
+            minhv_n            = minhv_i; // unused
             mstatus_n.mpp[1:0] = csr_wdata_int[29:28];
             mstatus_n.mpie     = csr_wdata_int[27];
             //csr_wdata_int[26:24]; // reserved
