@@ -202,7 +202,7 @@ module cv32e40px_id_stage
     output csr_opcode_e       csr_op_ex_o,
     input  PrivLvl_t          current_priv_lvl_i,
     output logic              csr_irq_sec_o,
-    output logic        [5:0] csr_cause_o,
+    output logic [$clog2(NUM_INTERRUPTS):0] csr_cause_o,
     output logic        [7:0] csr_irq_level_o,
     output logic              csr_save_if_o,
     output logic              csr_save_id_o,
@@ -237,7 +237,7 @@ module cv32e40px_id_stage
     output logic [5:0] atop_ex_o,
 
     // Interrupt signals
-    input  logic [31:0] irq_i,
+    input  logic [NUM_INTERRUPTS-1:0] irq_i,
     input  logic        irq_sec_i,
     input  logic [7:0]  irq_level_i,
     input  logic [31:0] mie_bypass_i,  // MIE CSR (bypass)
@@ -247,8 +247,8 @@ module cv32e40px_id_stage
     input  logic [7:0]  mintthresh_i,
     input  Mintstatus_t mintstatus_i,
     output logic        irq_ack_o,
-    output logic [ 4:0] irq_id_o,
-    output logic [ 4:0] exc_cause_o,
+    output logic [$clog2(NUM_INTERRUPTS)-1:0] irq_id_o,
+    output logic [$clog2(NUM_INTERRUPTS)-1:0] exc_cause_o,
 
     // Debug Signal
     output logic       debug_mode_o,
@@ -1385,9 +1385,10 @@ module cv32e40px_id_stage
   ////////////////////////////////////////////////////////////////////
 
   cv32e40px_controller #(
-      .COREV_CLUSTER(COREV_CLUSTER),
-      .COREV_PULP   (COREV_PULP),
-      .FPU          (FPU)
+      .COREV_CLUSTER  (COREV_CLUSTER ),
+      .COREV_PULP     (COREV_PULP    ),
+      .FPU            (FPU           ),
+      .NUM_INTERRUPTS (NUM_INTERRUPTS)
   ) controller_i (
       .clk          (clk),  // Gated clock
       .clk_ungated_i(clk_ungated_i),  // Ungated clock

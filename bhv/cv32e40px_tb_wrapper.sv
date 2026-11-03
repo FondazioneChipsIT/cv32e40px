@@ -57,7 +57,8 @@ module cv32e40px_tb_wrapper
     parameter FPU_OTHERS_LAT = 0,  // Floating-Point COMParison/CONVersion computing lanes pipeline registers number
     parameter ZFINX = 0,  // Float-in-General Purpose registers
     parameter NUM_MHPMCOUNTERS = 1,
-    parameter CLIC = 0  // Core Local Interrupt Controller
+    parameter CLIC = 0,  // Core Local Interrupt Controller
+    parameter NUM_INTERRUPTS = 32
 ) (
     // Clock and Reset
     input logic clk_i,
@@ -92,11 +93,11 @@ module cv32e40px_tb_wrapper
     input  logic [31:0] data_rdata_i,
 
     // Interrupt inputs
-    input  logic [31:0] irq_i,  // CLINT interrupts + CLINT extension interrupts
-    input  logic        irq_shv_i,  // CLIC selective hardware vectoring
-    input  logic [ 7:0] irq_level_i,  // CLIC interrupt level
+    input  logic [NUM_INTERRUPTS-1:0] irq_i,  // CLINT interrupts + CLINT extension interrupts
+    input  logic        irq_shv_i,            // CLIC selective hardware vectoring
+    input  logic [ 7:0] irq_level_i,          // CLIC interrupt level
     output logic        irq_ack_o,
-    output logic [ 4:0] irq_id_o,
+    output logic [$clog2(NUM_INTERRUPTS)-1:0] irq_id_o,
 
     // Debug Interface
     input  logic debug_req_i,
@@ -509,7 +510,8 @@ module cv32e40px_tb_wrapper
       .FPU_OTHERS_LAT  (FPU_OTHERS_LAT),
       .ZFINX           (ZFINX),
       .NUM_MHPMCOUNTERS(NUM_MHPMCOUNTERS),
-      .CLIC            (CLIC)
+      .CLIC            (CLIC),
+      .NUM_INTERRUPTS  (NUM_INTERRUPTS)
   ) cv32e40px_top_i (
       .clk_i (clk_i),
       .rst_ni(rst_ni),

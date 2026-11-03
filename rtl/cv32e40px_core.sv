@@ -124,11 +124,11 @@ module cv32e40px_core
 
 
     // Interrupt inputs
-    input  logic [31:0] irq_i,       // CLINT interrupts + CLINT extension interrupts
-    input  logic        irq_shv_i,   // CLIC selective hardware vectoring
-    input  logic [ 7:0] irq_level_i, // CLIC interrupt level
+    input  logic [NUM_INTERRUPTS-1:0] irq_i, // CLINT interrupts + CLINT extension interrupts
+    input  logic        irq_shv_i,           // CLIC selective hardware vectoring
+    input  logic [ 7:0] irq_level_i,         // CLIC interrupt level
     output logic        irq_ack_o,
-    output logic [ 4:0] irq_id_o,
+    output logic [$clog2(NUM_INTERRUPTS)-1:0] irq_id_o,
 
     // Debug Interface
     input  logic debug_req_i,
@@ -182,9 +182,9 @@ module cv32e40px_core
 
   logic [ 3:0] pc_mux_id;  // Mux selector for next PC
   logic [ 2:0] exc_pc_mux_id;  // Mux selector for exception PC
-  logic [ 4:0] m_exc_vec_pc_mux_id;  // Mux selector for vectored IRQ PC
-  logic [ 4:0] u_exc_vec_pc_mux_id;  // Mux selector for vectored IRQ PC
-  logic [ 4:0] exc_cause;
+  logic [$clog2(NUM_INTERRUPTS)-1:0] m_exc_vec_pc_mux_id; // Mux selector for vectored IRQ PC
+  logic [$clog2(NUM_INTERRUPTS)-1:0] u_exc_vec_pc_mux_id; // Mux selector for vectored IRQ PC
+  logic [$clog2(NUM_INTERRUPTS)-1:0] exc_cause;
 
   logic [ 1:0] trap_addr_mux;
 
@@ -350,17 +350,17 @@ module cv32e40px_core
   Mintstatus_t mintstatus;
   logic minhv;
 
-  logic                           csr_save_cause;
-  logic                           csr_save_if;
-  logic                           csr_save_id;
-  logic                           csr_save_ex;
-  logic [              5:0]       csr_cause;
+  logic       csr_save_cause;
+  logic       csr_save_if;
+  logic       csr_save_id;
+  logic       csr_save_ex;
+  logic [$clog2(NUM_INTERRUPTS):0] csr_cause;
   logic [7:0] csr_irq_level;
-  logic                           csr_restore_mret_id;
-  logic                           csr_restore_uret_id;
-  logic                           csr_restore_dret_id;
-  logic                           csr_mtvec_init;
-  logic                           csr_mtvt_init;
+  logic       csr_restore_mret_id;
+  logic       csr_restore_uret_id;
+  logic       csr_restore_dret_id;
+  logic       csr_mtvec_init;
+  logic       csr_mtvt_init;
 
   // HPM related control signals
   logic [             31:0]       mcounteren;
@@ -1378,19 +1378,19 @@ module cv32e40px_core
           actual_ebrk_mepc          <= 32'b0;
         end else begin
           if (!first_cause_illegal_found && (cs_registers_i.csr_cause_i == {
-                1'b0, EXC_CAUSE_ILLEGAL_INSN
+                1'b0, $clog2(NUM_INTERRUPTS)'(EXC_CAUSE_ILLEGAL_INSN)
               }) && csr_save_cause) begin
             first_cause_illegal_found <= 1'b1;
             actual_illegal_mepc       <= cs_registers_i.mepc_n;
           end
           if (!first_cause_ecall_found && (cs_registers_i.csr_cause_i == {
-                1'b0, EXC_CAUSE_ECALL_MMODE
+                1'b0, $clog2(NUM_INTERRUPTS)'(EXC_CAUSE_ECALL_MMODE)
               }) && csr_save_cause) begin
             first_cause_ecall_found <= 1'b1;
             actual_ecall_mepc       <= cs_registers_i.mepc_n;
           end
           if (!first_cause_ebrk_found && (cs_registers_i.csr_cause_i == {
-                1'b0, EXC_CAUSE_BREAKPOINT
+                1'b0, $clog2(NUM_INTERRUPTS)'(EXC_CAUSE_BREAKPOINT)
               }) && csr_save_cause) begin
             first_cause_ebrk_found <= 1'b1;
             actual_ebrk_mepc       <= cs_registers_i.mepc_n;

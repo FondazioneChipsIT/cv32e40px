@@ -95,8 +95,8 @@ module cv32e40px_if_stage #(
     input logic [3:0] pc_mux_i,  // sel for pc multiplexer
     input logic [2:0] exc_pc_mux_i,  // selects ISR address
 
-    input  logic [4:0] m_exc_vec_pc_mux_i,  // selects ISR address for vectorized interrupt lines
-    input  logic [4:0] u_exc_vec_pc_mux_i,  // selects ISR address for vectorized interrupt lines
+    input  logic [$clog2(NUM_INTERRUPTS)-1:0] m_exc_vec_pc_mux_i,    // selects ISR address for vectorized interrupt lines
+    input  logic [$clog2(NUM_INTERRUPTS)-1:0] u_exc_vec_pc_mux_i,    // selects ISR address for vectorized interrupt lines
     output logic       csr_mtvec_init_o,    // tell CS regfile to init mtvec
     output logic       csr_mtvt_init_o,     // tell CS regfile to init mtvt
 
@@ -133,7 +133,7 @@ module cv32e40px_if_stage #(
   logic [31:0] exc_pc;
 
   logic [23:0] trap_base_addr;
-  logic [ 4:0] exc_vec_pc_mux;
+  logic [$clog2(NUM_INTERRUPTS)-1:0] exc_vec_pc_mux;
   logic        fetch_failed;
 
   logic        aligner_ready;
@@ -166,7 +166,11 @@ module cv32e40px_if_stage #(
     unique case (exc_pc_mux_i)
       EXC_PC_EXCEPTION:
       exc_pc = {trap_base_addr, 8'h0};  //1.10 all the exceptions go to base address
-      EXC_PC_IRQ: exc_pc = {trap_base_addr, 1'b0, exc_vec_pc_mux, 2'b0};  // interrupts are vectored
+      EXC_PC_IRQ: begin
+        exc_pc                               = 32'b0;
+        exc_pc[31:8]                         = trap_base_addr;
+        exc_pc[$clog2(NUM_INTERRUPTS)-1+2:2] = exc_vec_pc_mux; // interrupts are vectored
+      end
       EXC_PC_DBD: exc_pc = {dm_halt_addr_i[31:2], 2'b0};
       EXC_PC_DBE: exc_pc = {dm_exception_addr_i[31:2], 2'b0};
       default: exc_pc = {trap_base_addr, 8'h0};
