@@ -868,7 +868,7 @@ module cv32e40px_cs_registers
         CSR_MTVEC:
         if (csr_we_int) begin
           mtvec_n      = csr_wdata_int[31:8];
-          mtvec_mode_n = csr_wdata_int[1:0]; // 00: directed mode, 01: vectored mode, 11: CLIC mode
+          mtvec_mode_n = (CLIC == 1) ? 2'b11 : csr_wdata_int[1:0]; // 00: directed mode, 01: vectored mode, 11: CLIC mode (fixed if CLIC)
         end
         CSR_MTVT:
         if (csr_we_int) begin
@@ -1291,7 +1291,7 @@ module cv32e40px_cs_registers
         CSR_MTVEC:
         if (csr_we_int) begin
           mtvec_n      = csr_wdata_int[31:8];
-          mtvec_mode_n = csr_wdata_int[1:0]; // 00: directed mode, 01: vectored mode, 11: CLIC mode
+          mtvec_mode_n = (CLIC == 1) ? 2'b11 : csr_wdata_int[1:0]; // 00: directed mode, 01: vectored mode, 11: CLIC mode (fixed if CLIC)
         end
         CSR_MTVT:
         if (csr_we_int) begin
