@@ -344,8 +344,10 @@ module cv32e40px_core
   logic m_irq_enable, u_irq_enable;
   logic csr_irq_sec;
   logic [31:0] mepc, uepc, depc;
-  logic [             31:0]       mie_bypass;
-  logic [             31:0]       mip;
+  logic [31:0] mie_bypass;
+  logic [31:0] mip;
+  logic [ 7:0] mintthresh;
+  Mintstatus_t mintstatus;
   logic minhv;
 
   logic                           csr_save_cause;
@@ -353,6 +355,7 @@ module cv32e40px_core
   logic                           csr_save_id;
   logic                           csr_save_ex;
   logic [              5:0]       csr_cause;
+  logic [7:0] csr_irq_level;
   logic                           csr_restore_mret_id;
   logic                           csr_restore_uret_id;
   logic                           csr_restore_dret_id;
@@ -589,23 +592,25 @@ module cv32e40px_core
   //                                             //
   /////////////////////////////////////////////////
   cv32e40px_id_stage #(
-      .COREV_X_IF      (COREV_X_IF),
-      .COREV_PULP      (COREV_PULP),
-      .COREV_CLUSTER   (COREV_CLUSTER),
-      .N_HWLP          (N_HWLP),
-      .PULP_SECURE     (PULP_SECURE),
-      .USE_PMP         (USE_PMP),
-      .A_EXTENSION     (A_EXTENSION),
-      .APU             (APU),
-      .FPU             (FPU),
-      .FPU_ADDMUL_LAT  (FPU_ADDMUL_LAT),
-      .FPU_OTHERS_LAT  (FPU_OTHERS_LAT),
-      .ZFINX           (ZFINX),
-      .APU_NARGS_CPU   (APU_NARGS_CPU),
-      .APU_WOP_CPU     (APU_WOP_CPU),
-      .APU_NDSFLAGS_CPU(APU_NDSFLAGS_CPU),
-      .APU_NUSFLAGS_CPU(APU_NUSFLAGS_CPU),
-      .DEBUG_TRIGGER_EN(DEBUG_TRIGGER_EN)
+      .COREV_X_IF       (COREV_X_IF      ),
+      .COREV_PULP       (COREV_PULP      ),
+      .COREV_CLUSTER    (COREV_CLUSTER   ),
+      .N_HWLP           (N_HWLP          ),
+      .PULP_SECURE      (PULP_SECURE     ),
+      .USE_PMP          (USE_PMP         ),
+      .A_EXTENSION      (A_EXTENSION     ),
+      .APU              (APU             ),
+      .FPU              (FPU             ),
+      .FPU_ADDMUL_LAT   (FPU_ADDMUL_LAT  ),
+      .FPU_OTHERS_LAT   (FPU_OTHERS_LAT  ),
+      .ZFINX            (ZFINX           ),
+      .APU_NARGS_CPU    (APU_NARGS_CPU   ),
+      .APU_WOP_CPU      (APU_WOP_CPU     ),
+      .APU_NDSFLAGS_CPU (APU_NDSFLAGS_CPU),
+      .APU_NUSFLAGS_CPU (APU_NUSFLAGS_CPU),
+      .DEBUG_TRIGGER_EN (DEBUG_TRIGGER_EN),
+      .CLIC             (CLIC            ),
+      .NUM_INTERRUPTS   (NUM_INTERRUPTS  )
   ) id_stage_i (
       .clk          (clk),  // Gated clock
       .clk_ungated_i(clk_i),  // Ungated clock
@@ -757,6 +762,7 @@ module cv32e40px_core
       .current_priv_lvl_i   (current_priv_lvl),
       .csr_irq_sec_o        (csr_irq_sec),
       .csr_cause_o          (csr_cause),
+      .csr_irq_level_o      (csr_irq_level),
       .csr_save_if_o        (csr_save_if),  // control signal to save pc
       .csr_save_id_o        (csr_save_id),  // control signal to save pc
       .csr_save_ex_o        (csr_save_ex),  // control signal to save pc
@@ -794,10 +800,13 @@ module cv32e40px_core
       // Interrupt Signals
       .irq_i         (irq_i),
       .irq_sec_i     ((PULP_SECURE) ? irq_sec_i : 1'b0),
+      .irq_level_i   (irq_level_i),
       .mie_bypass_i  (mie_bypass),
       .mip_o         (mip),
       .m_irq_enable_i(m_irq_enable),
       .u_irq_enable_i(u_irq_enable),
+      .mintthresh_i  (mintthresh),
+      .mintstatus_i  (mintstatus),
       .irq_ack_o     (irq_ack_o),
       .irq_id_o      (irq_id_o),
 
@@ -1121,6 +1130,8 @@ module cv32e40px_core
       .mip_i         (mip),
       .m_irq_enable_o(m_irq_enable),
       .u_irq_enable_o(u_irq_enable),
+      .mintthresh_o  (mintthresh),
+      .mintstatus_o  (mintstatus),
       .csr_irq_sec_i (csr_irq_sec),
       .sec_lvl_o     (sec_lvl_o),
       .mepc_o        (mepc),
@@ -1128,6 +1139,9 @@ module cv32e40px_core
 
       // HPM related control signals
       .mcounteren_o(mcounteren),
+
+      // Interrupts Selective Hardware Vectoring
+      .minhv_i(minhv),
 
       // debug
       .debug_mode_i       (debug_mode),
@@ -1157,6 +1171,7 @@ module cv32e40px_core
       .csr_restore_dret_i(csr_restore_dret_id),
 
       .csr_cause_i     (csr_cause),
+      .csr_irq_level_i (csr_irq_level),
       .csr_save_cause_i(csr_save_cause),
 
       // from hwloop registers
@@ -1298,7 +1313,9 @@ module cv32e40px_core
       // Check that a taken IRQ was for an enabled cause and that mstatus.mie gets disabled
       property p_irq_enabled_1;
         @(posedge clk) disable iff (!rst_ni) (pc_set && (pc_mux_id == PC_EXCEPTION) && (exc_pc_mux_id == EXC_PC_IRQ)) |=>
-         (cs_registers_i.mcause_q[5] && cs_registers_i.mie_q[cs_registers_i.mcause_q[4:0]] && !cs_registers_i.mstatus_q.mie);
+         (cs_registers_i.mcause_q[$clog2(NUM_INTERRUPTS)] &&
+          cs_registers_i.mie_q[cs_registers_i.mcause_q[$clog2(NUM_INTERRUPTS)-1:0]] &&
+          !cs_registers_i.mstatus_q.mie);
       endproperty
 
       a_irq_enabled_1 :

@@ -123,6 +123,7 @@ module cv32e40px_controller import cv32e40px_pkg::*;
   input  logic        irq_req_ctrl_i,
   input  logic        irq_sec_ctrl_i,
   input  logic [4:0]  irq_id_ctrl_i,
+  input  logic [7:0]  irq_level_ctrl_i,
   input  logic        irq_wu_ctrl_i,
   input  PrivLvl_t    current_priv_lvl_i,
 
@@ -153,6 +154,7 @@ module cv32e40px_controller import cv32e40px_pkg::*;
   output logic        csr_save_id_o,
   output logic        csr_save_ex_o,
   output logic [5:0]  csr_cause_o,
+  output logic [7:0]  csr_irq_level_o,
   output logic        csr_irq_sec_o,
   output logic        csr_restore_mret_id_o,
   output logic        csr_restore_uret_id_o,
@@ -280,6 +282,7 @@ module cv32e40px_controller import cv32e40px_pkg::*;
     trap_addr_mux_o        = TRAP_MACHINE;
 
     csr_cause_o            = '0;
+    csr_irq_level_o        = '0;
     csr_irq_sec_o          = 1'b0;
 
     pc_mux_o               = PC_BOOT;
@@ -429,6 +432,7 @@ module cv32e40px_controller import cv32e40px_pkg::*;
 
           csr_save_cause_o  = 1'b1;
           csr_cause_o       = {1'b1,irq_id_ctrl_i};
+          csr_irq_level_o   = irq_level_ctrl_i;
           csr_save_if_o     = 1'b1;
         end
       end
@@ -534,6 +538,7 @@ module cv32e40px_controller import cv32e40px_pkg::*;
 
                 csr_save_cause_o  = 1'b1;
                 csr_cause_o       = {1'b1,irq_id_ctrl_i};
+                csr_irq_level_o   = irq_level_ctrl_i;
                 csr_save_id_o     = 1'b1;
               end
             else
@@ -770,6 +775,7 @@ module cv32e40px_controller import cv32e40px_pkg::*;
 
                 csr_save_cause_o  = 1'b1;
                 csr_cause_o       = {1'b1,irq_id_ctrl_i};
+                csr_irq_level_o   = irq_level_ctrl_i;
                 csr_save_id_o     = 1'b1;
 
                 ctrl_fsm_ns       = DECODE;
@@ -999,6 +1005,7 @@ module cv32e40px_controller import cv32e40px_pkg::*;
 
             csr_save_cause_o  = 1'b1;
             csr_cause_o       = {1'b1,irq_id_ctrl_i};
+            csr_irq_level_o   = irq_level_ctrl_i;
             csr_save_id_o     = 1'b1;
           end
         end

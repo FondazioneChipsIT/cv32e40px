@@ -2811,7 +2811,9 @@ module cv32e40px_decoder
               CSR_MEPC,
               CSR_MTVEC,
               CSR_MTVT,
-              CSR_MCAUSE :
+              CSR_MCAUSE,
+              CSR_MINTTHRESH, // TODO: do we need to treat this as status reg? // TODO: gate when CLIC = 0
+              CSR_MINTSTATUS :
                 // Not illegal, but treat as status CSR for side effect handling
                 csr_status_o = 1'b1;
 

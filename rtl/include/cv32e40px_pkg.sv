@@ -325,11 +325,13 @@ package cv32e40px_pkg;
     CSR_MHPMEVENT31   = 12'h33F,
 
     // Machine trap handling
-    CSR_MSCRATCH = 12'h340,
-    CSR_MEPC     = 12'h341,
-    CSR_MCAUSE   = 12'h342,
-    CSR_MTVAL    = 12'h343,
-    CSR_MIP      = 12'h344,
+    CSR_MSCRATCH   = 12'h340,
+    CSR_MEPC       = 12'h341,
+    CSR_MCAUSE     = 12'h342,
+    CSR_MTVAL      = 12'h343,
+    CSR_MIP        = 12'h344,
+    CSR_MINTSTATUS = 12'h346,
+    CSR_MINTTHRESH = 12'h347,
 
     // Physical memory protection (PMP)
     CSR_PMPCFG0   = 12'h3A0,  // Not included (USE_PMP = 0)
@@ -542,6 +544,16 @@ package cv32e40px_pkg;
     PRIV_LVL_S = 2'b01,
     PRIV_LVL_U = 2'b00
   } PrivLvl_t;
+
+  // interrupt status (clic)
+  typedef struct packed {
+    logic [31:24] mil;
+    logic [23:16] reserved;
+    // hardwired to '0
+    logic [15:8]  sil;
+    // hardwired to '0
+    logic [7:0]   uil;
+  } Mintstatus_t;
 
   typedef struct packed {
     logic uie;
