@@ -40,7 +40,9 @@ module cv32e40px_decoder
   parameter PULP_SECURE       = 0,
   parameter USE_PMP           = 0,
   parameter APU_WOP_CPU       = 6,
-  parameter DEBUG_TRIGGER_EN  = 1
+  parameter DEBUG_TRIGGER_EN  = 1,
+  parameter CLIC              = 0,              // CLIC csrs are legal only if CLIC = 1
+  parameter SHADOW            = 0               // mshwint csr is legal only if SHADOW = 1
 )
 (
   // signals running to/from controller
@@ -2803,24 +2805,37 @@ module cv32e40px_decoder
             CSR_MVENDORID,
               CSR_MARCHID,
               CSR_MIMPID,
-              CSR_MHARTID,
-              CSR_MCLICBASE:
+              CSR_MHARTID:
                 if (csr_op != CSR_OP_READ) csr_illegal = 1'b1;
+
+            // mclicbase is read only and exists only if CLIC = 1
+            CSR_MCLICBASE:
+                if (CLIC == 0 || csr_op != CSR_OP_READ) csr_illegal = 1'b1;
 
             // These are valid CSR registers
             CSR_MSTATUS,
               CSR_MEPC,
               CSR_MTVEC,
-              CSR_MTVT,
-              CSR_MCAUSE,
-              CSR_MINTTHRESH, // TODO: do we need to treat this as status reg? // TODO: gate when CLIC = 0
+              CSR_MCAUSE:
+                // Not illegal, but treat as status CSR for side effect handling
+                csr_status_o = 1'b1;
+
+            // CLIC csrs exist only if CLIC = 1, otherwise they result in illegal instruction
+            CSR_MTVT,
+              CSR_MINTTHRESH, // TODO: do we need to treat this as status reg?
               CSR_MINTSTATUS,
-              CSR_MSHWINT,
               CSR_MNXTI,
               CSR_JALMNXTI,
               CSR_MNXTICFG:
-                // Not illegal, but treat as status CSR for side effect handling
-                csr_status_o = 1'b1;
+                // Treat as status CSR for side effect handling
+                if (CLIC == 0) csr_illegal = 1'b1;
+                else           csr_status_o = 1'b1;
+
+            // mshwint exists only if SHADOW = 1, otherwise it results in illegal instruction
+            CSR_MSHWINT:
+                // Treat as status CSR for side effect handling
+                if (SHADOW == 0) csr_illegal = 1'b1;
+                else             csr_status_o = 1'b1;
 
             // These are valid CSR registers
             CSR_MISA,

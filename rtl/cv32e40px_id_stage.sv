@@ -1332,7 +1332,9 @@ module cv32e40px_id_stage
       .PULP_SECURE     (PULP_SECURE),
       .USE_PMP         (USE_PMP),
       .APU_WOP_CPU     (APU_WOP_CPU),
-      .DEBUG_TRIGGER_EN(DEBUG_TRIGGER_EN)
+      .DEBUG_TRIGGER_EN(DEBUG_TRIGGER_EN),
+      .CLIC            (CLIC),
+      .SHADOW          (SHADOW)
   ) decoder_i (
       // controller related signals
       .deassert_we_i(deassert_we),
