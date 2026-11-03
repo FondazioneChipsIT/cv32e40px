@@ -1176,6 +1176,7 @@ module cv32e40px_core
       .csr_wdata_i     (csr_wdata),
       .csr_op_i        (csr_op),
       .csr_rdata_o     (csr_rdata),
+      .ex_ready_i      (ex_ready),
 
       .fs_off_o   (fs_off),
       .frm_o      (frm_csr),

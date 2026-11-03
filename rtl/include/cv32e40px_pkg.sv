@@ -325,17 +325,18 @@ package cv32e40px_pkg;
     CSR_MHPMEVENT31   = 12'h33F,
 
     // Machine trap handling
-    CSR_MSCRATCH   = 12'h340,
-    CSR_MEPC       = 12'h341,
-    CSR_MCAUSE     = 12'h342,
-    CSR_MTVAL      = 12'h343,
-    CSR_MIP        = 12'h344,
-    CSR_MNXTI      = 12'h345,
-    CSR_MINTSTATUS = 12'h346,
-    CSR_MINTTHRESH = 12'h347,
-    CSR_MCLICBASE  = 12'h350,
-    CSR_JALMNXTI   = 12'hBCF, // customized csr
-    CSR_MNXTICFG   = 12'hBD0, // customized csr
+    CSR_MSCRATCH     = 12'h340,
+    CSR_MEPC         = 12'h341,
+    CSR_MCAUSE       = 12'h342,
+    CSR_MTVAL        = 12'h343,
+    CSR_MIP          = 12'h344,
+    CSR_MNXTI        = 12'h345,
+    CSR_MINTSTATUS   = 12'h346,
+    CSR_MINTTHRESH   = 12'h347,
+    CSR_MSCRATCHCSWL = 12'h349,
+    CSR_MCLICBASE    = 12'h350,
+    CSR_JALMNXTI     = 12'hBCF, // customized csr
+    CSR_MNXTICFG     = 12'hBD0, // customized csr
 
     // Physical memory protection (PMP)
     CSR_PMPCFG0   = 12'h3A0,  // Not included (USE_PMP = 0)

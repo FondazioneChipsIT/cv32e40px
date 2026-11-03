@@ -72,6 +72,7 @@ module cv32e40px_cs_registers
     input  logic        [31:0] csr_wdata_i,
     input  csr_opcode_e        csr_op_i,
     output logic        [31:0] csr_rdata_o,
+    input  logic               ex_ready_i,  // EX stage instruction leaves EX in this cycle (qualifies the mscratchcswl write)
 
     output logic               fs_off_o,
     output logic [        2:0] frm_o,
@@ -330,6 +331,10 @@ module cv32e40px_cs_registers
   logic mnxti_pass;
   assign mnxti_pass = (irq_q) && CLIC && (irq_level_q > ((mpil_q > mintthresh_q) ? mpil_q : mintthresh_q)) && ((~CLIC_SHV) || (~irq_shv_q));
 
+  // conditions that should be met for mscratchcswl csr operation
+  logic mscratchcswl_swap;
+  assign mscratchcswl_swap = (mpil_q == 8'b0) != (mintstatus_q.mil == 8'b0);
+
   ////////////////////////////////////////////
   //   ____ ____  ____    ____              //
   //  / ___/ ___||  _ \  |  _ \ ___  __ _   //
@@ -387,6 +392,12 @@ module cv32e40px_cs_registers
         CSR_MTVT: csr_rdata_int = {mtvt_q, 8'h0};
         // mscratch: machine scratch
         CSR_MSCRATCH: csr_rdata_int = mscratch_q;
+        // mscratchcswl: scratch swap CSR for interrupt levels
+        CSR_MSCRATCHCSWL:
+          if (mscratchcswl_swap)
+            csr_rdata_int = mscratch_q;    // rd = mscratch
+          else
+            csr_rdata_int = csr_wdata_i;   // rd = rs1
         // mclicbase: base address for CLIC memory mapped registers
         CSR_MCLICBASE: csr_rdata_int = MCLICBASE_ADDR;
         // mnxti: next intertupt handler address and interrupt-enable CSR
@@ -607,6 +618,12 @@ module cv32e40px_cs_registers
         CSR_MTVT: csr_rdata_int = {mtvt_q, 8'h0};
         // mscratch: machine scratch
         CSR_MSCRATCH: csr_rdata_int = mscratch_q;
+        // mscratchcswl: scratch swap CSR for interrupt levels
+        CSR_MSCRATCHCSWL:
+          if (mscratchcswl_swap)
+            csr_rdata_int = mscratch_q;    // rd = mscratch
+          else
+            csr_rdata_int = csr_wdata_i;   // rd = rs1
         // mclicbase: base address for CLIC memory mapped registers
         CSR_MCLICBASE: csr_rdata_int = MCLICBASE_ADDR;
         // mnxti: next intertupt handler address and interrupt-enable CSR
@@ -862,6 +879,11 @@ module cv32e40px_cs_registers
         if (csr_we_int) begin
           mscratch_n = csr_wdata_int;
         end
+        // mscratchcswl: scratch swap CSR for interrupt levels
+        CSR_MSCRATCHCSWL:
+        // the swap is not idempotent: write only when the instruction leaves EX, not on every stalled cycle
+        if (csr_we_int && mscratchcswl_swap && ex_ready_i)
+          mscratch_n = csr_wdata_i;
         // mnxti: next intertupt handler address and interrupt-enable CSR
         CSR_MNXTI: begin
           if (csr_we_int) begin
@@ -1280,6 +1302,11 @@ module cv32e40px_cs_registers
         if (csr_we_int) begin
           mscratch_n = csr_wdata_int;
         end
+        // mscratchcswl: scratch swap CSR for interrupt levels
+        CSR_MSCRATCHCSWL:
+        // the swap is not idempotent: write only when the instruction leaves EX, not on every stalled cycle
+        if (csr_we_int && mscratchcswl_swap && ex_ready_i)
+          mscratch_n = csr_wdata_i;
         // mnxti: next intertupt handler address and interrupt-enable CSR
         CSR_MNXTI: begin
           if (csr_we_int) begin

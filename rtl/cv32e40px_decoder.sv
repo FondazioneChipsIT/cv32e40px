@@ -2831,6 +2831,10 @@ module cv32e40px_decoder
                 if (CLIC == 0) csr_illegal = 1'b1;
                 else           csr_status_o = 1'b1;
 
+            // mscratchcswl exists only if CLIC = 1;
+            CSR_MSCRATCHCSWL:
+              if (CLIC == 0 || csr_op != CSR_OP_WRITE) csr_illegal = 1'b1;
+
             // mshwint exists only if SHADOW = 1, otherwise it results in illegal instruction
             CSR_MSHWINT:
                 // Treat as status CSR for side effect handling
