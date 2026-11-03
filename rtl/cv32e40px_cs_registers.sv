@@ -887,11 +887,15 @@ module cv32e40px_cs_registers
         // mnxti: next intertupt handler address and interrupt-enable CSR
         CSR_MNXTI: begin
           if (csr_we_int) begin
-            mstatus_n.mie = mstatus_q.mie | csr_wdata_int[3]; //enable interrupt regardless of the conditions
+            // update mie from the operand, regardless of the conditions: set for csrrsi, clear for csrrci
+            // (csr_wdata_int is not used, because it also contains the address of the vector table entry)
+            if (csr_op_i == CSR_OP_CLEAR) mstatus_n.mie = mstatus_q.mie & ~csr_wdata_i[3];
+            else                          mstatus_n.mie = mstatus_q.mie |  csr_wdata_i[3];
             if (mnxti_pass) begin
-              // update mil, excode and set ack signal if the conditions are met
+              // update mil, excode, interrupt bit and set ack signal if the conditions are met
               mintstatus_n.mil                     = irq_level_q;
               mcause_n[$clog2(NUM_INTERRUPTS)-1:0] = irq_id_instant_q;
+              mcause_n[$clog2(NUM_INTERRUPTS)]     = 1'b1;
               irq_ack_mnxti_n                      = 1'b1;
             end else begin
               // to check if irq_i is onehot
@@ -908,11 +912,15 @@ module cv32e40px_cs_registers
         // jalmnxti: jump and link version of mnxti CSR
         CSR_JALMNXTI: begin
           if (csr_we_int) begin
-            mstatus_n.mie = mstatus_q.mie | csr_wdata_int[3]; //enable interrupt regardless of the conditions
+            // update mie from the operand, regardless of the conditions: set for csrrsi, clear for csrrci
+            // (csr_wdata_int is not used, because it also contains the address of the vector table entry)
+            if (csr_op_i == CSR_OP_CLEAR) mstatus_n.mie = mstatus_q.mie & ~csr_wdata_i[3];
+            else                          mstatus_n.mie = mstatus_q.mie |  csr_wdata_i[3];
             if (mnxti_pass) begin
-              // update mil, excode and set ack signal if the conditions are met
+              // update mil, excode, interrupt bit and set ack signal if the conditions are met
               mintstatus_n.mil                     = irq_level_q;
               mcause_n[$clog2(NUM_INTERRUPTS)-1:0] = irq_id_instant_q;
+              mcause_n[$clog2(NUM_INTERRUPTS)]     = 1'b1;
               irq_ack_mnxti_n                      = 1'b1;
               jalmnxti_ctrl_o                      = 1'b1;             // set the jump req signal
               jalmnxti_pc_o[31:8]                  = mtvt_q;           // output the base address part of the jump target address
@@ -1310,11 +1318,15 @@ module cv32e40px_cs_registers
         // mnxti: next intertupt handler address and interrupt-enable CSR
         CSR_MNXTI: begin
           if (csr_we_int) begin
-            mstatus_n.mie = mstatus_q.mie | csr_wdata_int[3]; //enable interrupt regardless of the conditions
+            // update mie from the operand, regardless of the conditions: set for csrrsi, clear for csrrci
+            // (csr_wdata_int is not used, because it also contains the address of the vector table entry)
+            if (csr_op_i == CSR_OP_CLEAR) mstatus_n.mie = mstatus_q.mie & ~csr_wdata_i[3];
+            else                          mstatus_n.mie = mstatus_q.mie |  csr_wdata_i[3];
             if (mnxti_pass) begin
-              // update mil, excode and set ack signal if the conditions are met
+              // update mil, excode, interrupt bit and set ack signal if the conditions are met
               mintstatus_n.mil                     = irq_level_q;
               mcause_n[$clog2(NUM_INTERRUPTS)-1:0] = irq_id_instant_q;
+              mcause_n[$clog2(NUM_INTERRUPTS)]     = 1'b1;
               irq_ack_mnxti_n                      = 1'b1;
             end else begin
               // to check if irq_i is onehot
@@ -1331,11 +1343,15 @@ module cv32e40px_cs_registers
         // jalmnxti: jump and link version of mnxti CSR
         CSR_JALMNXTI: begin
           if (csr_we_int) begin
-            mstatus_n.mie = mstatus_q.mie | csr_wdata_int[3]; //enable interrupt regardless of the conditions
+            // update mie from the operand, regardless of the conditions: set for csrrsi, clear for csrrci
+            // (csr_wdata_int is not used, because it also contains the address of the vector table entry)
+            if (csr_op_i == CSR_OP_CLEAR) mstatus_n.mie = mstatus_q.mie & ~csr_wdata_i[3];
+            else                          mstatus_n.mie = mstatus_q.mie |  csr_wdata_i[3];
             if (mnxti_pass) begin
-              // update mil, excode and set ack signal if the conditions are met
+              // update mil, excode, interrupt bit and set ack signal if the conditions are met
               mintstatus_n.mil                     = irq_level_q;
               mcause_n[$clog2(NUM_INTERRUPTS)-1:0] = irq_id_instant_q;
+              mcause_n[$clog2(NUM_INTERRUPTS)]     = 1'b1;
               irq_ack_mnxti_n                      = 1'b1;
               jalmnxti_ctrl_o                      = 1'b1;             // set the jump req signal
               jalmnxti_pc_o[31:8]                  = mtvt_q;           // output the base address part of the jump target address

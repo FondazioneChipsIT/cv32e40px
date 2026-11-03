@@ -173,6 +173,10 @@ module cv32e40px_decoder
 
   csr_opcode_e csr_op;
 
+  // mnxti and jalmnxti are accessible only with csrrs with rs1 = x0 (csrr), csrrsi with
+  // immediate bits 0, 2 and 4 equal to zero, and csrrci. All the other forms are reserved.
+  logic       mnxti_form_illegal;
+
   logic       alu_en;
   logic       mult_int_en;
   logic       mult_dot_en;
@@ -187,6 +191,14 @@ module cv32e40px_decoder
   // unittypes for latencies to help us decode for APU
   enum logic[1:0] {ADDMUL, DIVSQRT, NONCOMP, CONV} fp_op_group;
 
+  always_comb begin : mnxti_form_check
+    unique case (instr_rdata_i[14:12])
+      3'b010:  mnxti_form_illegal = (instr_rdata_i[19:15] != 5'b0);                           // csrrs: legal only with rs1 = x0
+      3'b110:  mnxti_form_illegal = instr_rdata_i[19] | instr_rdata_i[17] | instr_rdata_i[15]; // csrrsi: bits 0, 2 and 4 are reserved
+      3'b111:  mnxti_form_illegal = 1'b0;                                                     // csrrci
+      default: mnxti_form_illegal = 1'b1;                                                     // csrrw, csrrc, csrrwi
+    endcase
+  end
 
   /////////////////////////////////////////////
   //   ____                     _            //
@@ -2823,12 +2835,17 @@ module cv32e40px_decoder
             // CLIC csrs exist only if CLIC = 1, otherwise they result in illegal instruction
             CSR_MTVT,
               CSR_MINTTHRESH, // TODO: do we need to treat this as status reg?
-              CSR_MNXTI,
-              CSR_JALMNXTI,
               CSR_MNXTICFG:
                 // Treat as status CSR for side effect handling
                 if (CLIC == 0) csr_illegal = 1'b1;
                 else           csr_status_o = 1'b1;
+
+            // mnxti and jalmnxti exist only if CLIC = 1 and only some instruction forms are allowed
+            CSR_MNXTI,
+              CSR_JALMNXTI:
+                // Treat as status CSR for side effect handling
+                if (CLIC == 0 || mnxti_form_illegal) csr_illegal = 1'b1;
+                else                                 csr_status_o = 1'b1;
 
             // mintstatus is read only and exists only if CLIC = 1
             CSR_MINTSTATUS:
