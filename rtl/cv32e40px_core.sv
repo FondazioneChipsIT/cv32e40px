@@ -41,6 +41,7 @@ module cv32e40px_core
     parameter ZFINX = 0,  // Float-in-General Purpose registers
     parameter NUM_MHPMCOUNTERS = 1,
     parameter CLIC = 0,  // Core Local Interrupt Controller
+    parameter MCLICBASE_ADDR = 32'h1A200000,  // Base address for CLIC memory mapped registers
     parameter NUM_INTERRUPTS = 32
 ) (
     // Clock and Reset
@@ -362,6 +363,13 @@ module cv32e40px_core
   logic       csr_mtvec_init;
   logic       csr_mtvt_init;
 
+  logic        irq_ack;          // interrupt acknowledge signal sent by id_stage module
+  logic        irq_ack_mnxti;    // interrupt acknowledge signal sent by cs_register module (mnxti csr)
+  logic [$clog2(NUM_INTERRUPTS)-1:0] irq_id_instant; // the interrupt id calculated by id_stage module is sent to cs_register module for mnxti operation
+  logic        jalmnxti_ctrl;    // jump req signal sent by cs_register module for jalmnxti csr
+  logic [31:0] jalmnxti_pc;      // jump target address sent by cs_register module for jalmnxti csr
+  logic        mnxti_en;
+
   // HPM related control signals
   logic [             31:0]       mcounteren;
 
@@ -428,6 +436,13 @@ module cv32e40px_core
   assign apu_flags_o = apu_flags_ex;
 
   assign x_mem_result_o.dbg = '0;
+
+  // irq_ack signal
+  // The irq_ack signal is determined by either id_stage module under vectoring module
+  // or cs_register module under non-vectoring mode. Since mnxti CSR need the information
+  // of the taken interrupt for further operation, the non-vectoring interrupt taken by
+  // the core cannot be acknowledged and thus cleared immediately
+  assign irq_ack_o = (CLIC_SHV && (irq_shv_i || !mnxti_en )) ? irq_ack : irq_ack_mnxti;
 
   //////////////////////////////////////////////////////////////////////////////////////////////
   //   ____ _            _      __  __                                                   _    //
@@ -578,8 +593,10 @@ module cv32e40px_core
       .halt_if_i (halt_if),
       .id_ready_i(id_ready),
 
-      .if_busy_o   (if_busy),
-      .perf_imiss_o(perf_imiss)
+      .if_busy_o       (if_busy),
+      .perf_imiss_o    (perf_imiss),
+      .jalmnxti_pc_i   (jalmnxti_pc),  // jump target address from cs_register module
+      .jalmnxti_ctrl_i (jalmnxti_ctrl) // jump req from jalmnxti csr
   );
 
 
@@ -807,8 +824,10 @@ module cv32e40px_core
       .u_irq_enable_i(u_irq_enable),
       .mintthresh_i  (mintthresh),
       .mintstatus_i  (mintstatus),
-      .irq_ack_o     (irq_ack_o),
+      .irq_ack_o     (irq_ack),
       .irq_id_o      (irq_id_o),
+      .irq_id_ctrl_o (irq_id_instant), // irq_id_ctrl_o is sent to cs_register
+                                       // module for mnxti csr operation
 
       // Debug Signal
       .debug_mode_o          (debug_mode),
@@ -1095,6 +1114,7 @@ module cv32e40px_core
       .COREV_CLUSTER   (COREV_CLUSTER),      
       .DEBUG_TRIGGER_EN(DEBUG_TRIGGER_EN),
       .CLIC            (CLIC),
+      .MCLICBASE_ADDR  (MCLICBASE_ADDR),
       .NUM_INTERRUPTS  (NUM_INTERRUPTS)
   ) cs_registers_i (
       .clk  (clk),
@@ -1126,16 +1146,24 @@ module cv32e40px_core
       .fregs_we_i (fregs_we),
 
       // Interrupt related control signals
-      .mie_bypass_o  (mie_bypass),
-      .mip_i         (mip),
-      .m_irq_enable_o(m_irq_enable),
-      .u_irq_enable_o(u_irq_enable),
-      .mintthresh_o  (mintthresh),
-      .mintstatus_o  (mintstatus),
-      .csr_irq_sec_i (csr_irq_sec),
-      .sec_lvl_o     (sec_lvl_o),
-      .mepc_o        (mepc),
-      .uepc_o        (uepc),
+      .mie_bypass_o    (mie_bypass),
+      .mip_i           (mip),
+      .m_irq_enable_o  (m_irq_enable),
+      .u_irq_enable_o  (u_irq_enable),
+      .mintthresh_o    (mintthresh),
+      .mintstatus_o    (mintstatus),
+      .irq_level_i     (irq_level_i),      // input interrupt level for mnxti csr operation
+      .irq_shv_i       (irq_shv_i),        // input interrupr vectoring selection for mnxti csr operation
+      .irq_i           (irq_i),            // onehot signal of input interrupt for mnxti csr operation
+      .irq_id_instant_i(irq_id_instant),   // interrupt id for mnxti csr operation
+      .irq_ack_mnxti_o (irq_ack_mnxti),    // interrupt acknowledge signal sent by mnxti csr
+      .jalmnxti_ctrl_o (jalmnxti_ctrl),    // jump req signal sent by jalmnxti csr
+      .jalmnxti_pc_o   (jalmnxti_pc),      // jump target address sent by jalmnxti csr
+      .mnxti_en_o      (mnxti_en),         // whether the mnxti feature is enabled
+      .csr_irq_sec_i   (csr_irq_sec),
+      .sec_lvl_o       (sec_lvl_o),
+      .mepc_o          (mepc),
+      .uepc_o          (uepc),
 
       // HPM related control signals
       .mcounteren_o(mcounteren),

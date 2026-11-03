@@ -35,6 +35,7 @@ module cv32e40px_top
     parameter ZFINX = 0,  // Float-in-General Purpose registers
     parameter NUM_MHPMCOUNTERS = 1,
     parameter CLIC = 0,  // Core Local Interrupt Controller
+    parameter MCLICBASE_ADDR = 32'h1A200000,  // Base address for CLIC memory mapped registers
     parameter NUM_INTERRUPTS = 32
 ) (
     // Clock and Reset
@@ -147,6 +148,7 @@ module cv32e40px_top
       .ZFINX           (ZFINX),
       .NUM_MHPMCOUNTERS(NUM_MHPMCOUNTERS),
       .CLIC            (CLIC),
+      .MCLICBASE_ADDR  (MCLICBASE_ADDR),
       .NUM_INTERRUPTS  (NUM_INTERRUPTS)
   ) core_i (
       .clk_i (clk_i),
