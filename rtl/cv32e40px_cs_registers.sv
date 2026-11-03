@@ -154,7 +154,7 @@ module cv32e40px_cs_registers
 
   localparam NUM_HPM_EVENTS = 16;
 
-  localparam MTVEC_MODE = 2'b01;
+  localparam MTVEC_MODE = CLIC ? 2'b11 : 2'b01;
 
   localparam MAX_N_PMP_ENTRIES = 16;
   localparam MAX_N_PMP_CFG = 4;
@@ -280,11 +280,11 @@ module cv32e40px_cs_registers
     csr_mie_we    = 1'b1;
 
     case (csr_op_i)
-      CSR_OP_WRITE: csr_mie_wdata = csr_wdata_i;
-      CSR_OP_SET:   csr_mie_wdata = csr_wdata_i | mie_q;
-      CSR_OP_CLEAR: csr_mie_wdata = (~csr_wdata_i) & mie_q;
+      CSR_OP_WRITE: csr_mie_wdata = CLIC ? {32'b0} : csr_wdata_i;
+      CSR_OP_SET:   csr_mie_wdata = CLIC ? {32'b0} : csr_wdata_i | mie_q;
+      CSR_OP_CLEAR: csr_mie_wdata = CLIC ? {32'b0} : (~csr_wdata_i) & mie_q;
       CSR_OP_READ: begin
-        csr_mie_wdata = csr_wdata_i;
+        csr_mie_wdata = CLIC ? {32'b0} : csr_wdata_i;
         csr_mie_we    = 1'b0;
       end
     endcase
@@ -337,6 +337,9 @@ module cv32e40px_cs_registers
 
         // mie: machine interrupt enable
         CSR_MIE: begin
+        if (CLIC)
+          csr_rdata_int = '0;
+        else
           csr_rdata_int = mie_q;
         end
 
@@ -364,6 +367,9 @@ module cv32e40px_cs_registers
           csr_rdata_int = {mcause_q[$clog2(NUM_INTERRUPTS)], {(32-$clog2(NUM_INTERRUPTS)-1){1'b0}}, mcause_q[$clog2(NUM_INTERRUPTS)-1:0]};
         // mip: interrupt pending
         CSR_MIP: begin
+        if (CLIC)
+          csr_rdata_int = '0;
+        else
           csr_rdata_int = mip;
         end
 
@@ -517,6 +523,9 @@ module cv32e40px_cs_registers
         CSR_MISA: csr_rdata_int = MISA_VALUE;
         // mie: machine interrupt enable
         CSR_MIE: begin
+        if (CLIC)
+          csr_rdata_int = '0;
+        else
           csr_rdata_int = mie_q;
         end
 
@@ -544,6 +553,9 @@ module cv32e40px_cs_registers
           csr_rdata_int = {mcause_q[$clog2(NUM_INTERRUPTS)], {(32-$clog2(NUM_INTERRUPTS)-1){1'b0}}, mcause_q[$clog2(NUM_INTERRUPTS)-1:0]};
         // mip: interrupt pending
         CSR_MIP: begin
+        if (CLIC)
+          csr_rdata_int = '0;
+        else
           csr_rdata_int = mip;
         end
         // mintstatus: interrupt status (clic)
@@ -718,13 +730,14 @@ module cv32e40px_cs_registers
         // mie: machine interrupt enable
         CSR_MIE:
         if (csr_we_int) begin
+          if (!CLIC)
           mie_n = csr_wdata_int & IRQ_MASK;
         end
         // mtvec: machine trap-handler base address
         CSR_MTVEC:
         if (csr_we_int) begin
           mtvec_n      = csr_wdata_int[31:8];
-          mtvec_mode_n = {1'b0, csr_wdata_int[0]};  // Only direct and vectored mode are supported
+          mtvec_mode_n = csr_wdata_int[1:0]; // 00: directed mode, 01: vectored mode, 11: CLIC mode
         end
         CSR_MTVT:
         if (csr_we_int) begin
@@ -1074,13 +1087,14 @@ module cv32e40px_cs_registers
         // mie: machine interrupt enable
         CSR_MIE:
         if (csr_we_int) begin
+          if (!CLIC)
           mie_n = csr_wdata_int & IRQ_MASK;
         end
         // mtvec: machine trap-handler base address
         CSR_MTVEC:
         if (csr_we_int) begin
           mtvec_n      = csr_wdata_int[31:8];
-          mtvec_mode_n = {1'b0, csr_wdata_int[0]};  // Only direct and vectored mode are supported
+          mtvec_mode_n = csr_wdata_int[1:0]; // 00: directed mode, 01: vectored mode, 11: CLIC mode
         end
         CSR_MTVT:
         if (csr_we_int) begin
@@ -1700,7 +1714,7 @@ module cv32e40px_cs_registers
 
   // Check that mie_bypass_o equals mie_n
   a_mie_bypass :
-  assert property (@(posedge clk) disable iff (!rst_n) (1'b1) |-> (mie_bypass_o == mie_n));
+  assert property (@(posedge clk) disable iff (!rst_n) (1'b1) |-> if (CLIC) (mie_bypass_o == {32'b0}) else (mie_bypass_o == mie_n));
 
 `endif
 
