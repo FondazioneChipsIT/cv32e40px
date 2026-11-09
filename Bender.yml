@@ -23,6 +23,7 @@ dependencies:
 sources:
   include_dirs:
     - rtl/include
+    - bhv
   files:
     - rtl/include/cv32e40px_core_v_xif_pkg.sv
     - rtl/include/cv32e40px_fpu_pkg.sv
@@ -64,3 +65,9 @@ sources:
     - target: rtl
       files:
         - bhv/cv32e40px_sim_clock_gate.sv
+    - target: all(any(test, cv32e40px_include_tracer), not(cv32e40px_exclude_tracer))
+      defines:
+        CV32E40PX_TRACE_EXECUTION: ~
+      files:
+        - bhv/include/cv32e40px_tracer_pkg.sv
+        - bhv/cv32e40px_tb_wrapper.sv
