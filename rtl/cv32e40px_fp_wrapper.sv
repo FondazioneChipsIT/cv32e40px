@@ -20,6 +20,7 @@ module cv32e40px_fp_wrapper
     // Clock and Reset
     input logic clk_i,
     input logic rst_ni,
+    input logic flush_i,  // Flush the FPU pipeline (driven by the core setback)
 
     // APU Side: Master port
     input  logic apu_req_i,
@@ -114,7 +115,7 @@ module cv32e40px_fp_wrapper
       .simd_mask_i   (1'b0),
       .in_valid_i    (apu_req_i),
       .in_ready_o    (apu_gnt_o),
-      .flush_i       (1'b0),
+      .flush_i       (flush_i),
       .result_o      (apu_rdata_o),
       .status_o      (apu_rflags_o),
       .tag_o         (  /* unused */),
