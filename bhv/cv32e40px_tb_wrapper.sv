@@ -531,6 +531,7 @@ module cv32e40px_tb_wrapper
       .data_be_o    (data_be_o),
       .data_addr_o  (data_addr_o),
       .data_wdata_o (data_wdata_o),
+      .data_atop_o  (),
       .data_rdata_i (data_rdata_i),
 
       .irq_i    (irq_i),

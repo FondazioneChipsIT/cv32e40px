@@ -39,6 +39,7 @@ module cv32e40px_core
     parameter FPU_ADDMUL_LAT = 0,  // Floating-Point ADDition/MULtiplication lane pipeline registers number
     parameter FPU_OTHERS_LAT = 0,  // Floating-Point COMParison/CONVersion lanes pipeline registers number
     parameter ZFINX = 0,  // Float-in-General Purpose registers
+    parameter A_EXTENSION = 0,  // RV32A atomics, issued to memory on data_atop_o
     parameter NUM_MHPMCOUNTERS = 1
 ) (
     // Clock and Reset
@@ -70,6 +71,7 @@ module cv32e40px_core
     output logic [ 3:0] data_be_o,
     output logic [31:0] data_addr_o,
     output logic [31:0] data_wdata_o,
+    output logic [ 5:0] data_atop_o,  // OBI ATOP, 0 when A_EXTENSION = 0
     input  logic [31:0] data_rdata_i,
 
     // CVFPU interface
@@ -142,7 +144,6 @@ module cv32e40px_core
   localparam PULP_SECURE = 0;
   localparam N_PMP_ENTRIES = 16;
   localparam USE_PMP = 0;  // if PULP_SECURE is 1, you can still not use the PMP
-  localparam A_EXTENSION = 0;
   localparam DEBUG_TRIGGER_EN = 1;
 
   // PULP bus interface behavior
@@ -155,7 +156,6 @@ module cv32e40px_core
   // Left in code (with their original _i, _o postfixes) for future design extensions;
   // these used to be former inputs/outputs of RI5CY
 
-  logic [5:0] data_atop_o;  // atomic operation, only active if parameter `A_EXTENSION != 0`
   logic       irq_sec_i;
   logic       sec_lvl_o;
 
