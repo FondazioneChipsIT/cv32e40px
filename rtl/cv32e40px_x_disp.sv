@@ -106,6 +106,7 @@ module cv32e40px_x_disp
   logic instr_offloaded_q, instr_offloaded_d;
   logic [3:0] mem_counter_q, mem_counter_d;
   logic dep;
+  logic waw;
   logic outstanding_mem;
   logic x_if_not_ready;
   logic x_if_memory_instr;
@@ -163,7 +164,11 @@ module cv32e40px_x_disp
   assign x_mem_data_req_o = x_mem_valid_i & x_mem_ready_o;
 
   // core stall signal
-  assign x_stall_o = dep | outstanding_mem | x_if_not_ready | x_if_memory_instr | illegal_forwarding_prevention | pending_q[id_q];
+  assign x_stall_o = dep | waw | outstanding_mem | x_if_not_ready | x_if_memory_instr | illegal_forwarding_prevention | pending_q[id_q];
+
+  // An instruction must not write rd before an offloaded instruction still due to write it
+  assign waw = scoreboard_q[waddr_id_i] & (waddr_id_i != '0) & ~instr_offloaded_q
+             & ~(x_result_valid_i & x_result_we_i & (x_result_rd_i == waddr_id_i));
 
   assign outstanding_mem = data_req_dec_i & (mem_counter_q != '0);
   assign x_if_memory_instr = x_mem_data_req_o & ~(x_issue_valid_o & x_issue_ready_i);
