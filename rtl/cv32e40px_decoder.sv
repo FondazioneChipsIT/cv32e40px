@@ -1529,6 +1529,8 @@ module cv32e40px_decoder
           if (illegal_insn_o) begin
             data_req       = 1'b0;
             data_we_o      = 1'b0;
+            // RVV stores are offloaded on the XIF: their rs2 is an X register (the stride)
+            reg_fp_b_o     = 1'b0;
           end
         // No FPU or ZFINX or MSTATUS.FS == FS_OFF
         end else begin
