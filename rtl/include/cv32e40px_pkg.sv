@@ -53,6 +53,7 @@ package cv32e40px_pkg;
   parameter OPCODE_STORE_FP = 7'h27;
   parameter OPCODE_LOAD_FP = 7'h07;
   parameter OPCODE_AMO = 7'h2F;
+  parameter OPCODE_OP_V = 7'h57;
 
   // Those custom opcodes are used for PULP custom instructions
   parameter OPCODE_CUSTOM_0 = 7'h0b;

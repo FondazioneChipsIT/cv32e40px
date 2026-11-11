@@ -2983,6 +2983,16 @@ module cv32e40px_decoder
 
         end
       end
+
+      // RVV is offloaded on the XIF: an OPFVF instruction reads its scalar rs1 from the F registers
+      OPCODE_OP_V: begin
+        illegal_insn_o = 1'b1;
+        if (FPU && !ZFINX && instr_rdata_i[14:12] == 3'b101) begin
+          rega_used_o = 1'b1;
+          reg_fp_a_o  = 1'b1;
+        end
+      end
+
       default: illegal_insn_o = 1'b1;
     endcase
 

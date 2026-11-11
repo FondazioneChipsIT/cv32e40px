@@ -1184,9 +1184,10 @@ module cv32e40px_id_stage
             end else begin
               x_issue_req_o.rs[i+3*j] = regfile_data_rc_id[j];
             end
-            if (x_ex_fwd[i+3*j]) begin
+            // The forwarding compares integer register numbers only: an F register rs1 is never forwarded
+            if (x_ex_fwd[i+3*j] && !(i == 0 && regfile_fp_a)) begin
               x_issue_req_o.rs[i+3*j] = result_fw_to_x_i;
-            end else if (x_wb_fwd[i+3*j]) begin
+            end else if (x_wb_fwd[i+3*j] && !(i == 0 && regfile_fp_a)) begin
               x_issue_req_o.rs[i+3*j] = regfile_wdata_wb_i;
             end
           end
