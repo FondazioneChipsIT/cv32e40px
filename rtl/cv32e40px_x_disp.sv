@@ -164,7 +164,9 @@ module cv32e40px_x_disp
   assign x_mem_data_req_o = x_mem_valid_i & x_mem_ready_o;
 
   // core stall signal
-  assign x_stall_o = dep | waw | outstanding_mem | x_if_not_ready | x_if_memory_instr | illegal_forwarding_prevention | pending_q[id_q];
+  // A refused instruction stays in ID, so the registered illegal flag traps it and not the next one
+  assign x_stall_o = dep | waw | outstanding_mem | x_if_not_ready | x_if_memory_instr | illegal_forwarding_prevention | pending_q[id_q]
+                   | x_illegal_insn_n;
 
   // An instruction must not write rd before an offloaded instruction still due to write it
   assign waw = scoreboard_q[waddr_id_i] & (waddr_id_i != '0) & ~instr_offloaded_q
