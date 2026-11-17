@@ -32,6 +32,7 @@ typedef struct {
   logic lsu_data_we_ex;
   logic debug_mode;
   logic [2:0] debug_cause;
+  logic debug_req_entry;
   //// INSTR IF Probes ////
   logic instr_req;
   logic instr_grant;
@@ -426,6 +427,7 @@ task monitor_pipeline();
 
     r_pipe_freeze_trace.debug_mode      = debug_mode_i;
     r_pipe_freeze_trace.debug_cause     = debug_cause_i;
+    r_pipe_freeze_trace.debug_req_entry = debug_req_entry_i;
     r_pipe_freeze_trace.prefetch_req    = prefetch_req_i;
     r_pipe_freeze_trace.pc_set          = pc_set_i;
     //// IF probes ////
