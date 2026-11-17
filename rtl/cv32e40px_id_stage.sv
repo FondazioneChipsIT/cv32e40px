@@ -1971,7 +1971,7 @@ module cv32e40px_id_stage
   //----------------------------------------------------------------------------
   // Assertions
   //----------------------------------------------------------------------------
-`ifdef CV32E40P_ASSERT_ON
+`ifdef CV32E40PX_ASSERT_ON
 
   always_comb begin
     if (FPU == 1) begin

@@ -237,7 +237,7 @@ module cv32e40px_aligner (
   // Assertions
   //////////////////////////////////////////////////////////////////////////////
 
-`ifdef CV32E40P_ASSERT_ON
+`ifdef CV32E40PX_ASSERT_ON
 
   // Hardware Loop check
   property p_hwlp_update_pc;

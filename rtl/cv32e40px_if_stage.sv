@@ -320,7 +320,7 @@ module cv32e40px_if_stage #(
   // Assertions
   //----------------------------------------------------------------------------
 
-`ifdef CV32E40P_ASSERT_ON
+`ifdef CV32E40PX_ASSERT_ON
 
   generate
     if (!COREV_PULP) begin : gen_no_pulp_xpulp_assertions
