@@ -149,7 +149,7 @@ module cv32e40px_fifo #(
   // Assertions
   //////////////////////////////////////////////////////////////////////////////
 
-`ifdef CV32E40P_ASSERT_ON
+`ifdef CV32E40PX_ASSERT_ON
 
   initial begin
     assert (DEPTH > 0)

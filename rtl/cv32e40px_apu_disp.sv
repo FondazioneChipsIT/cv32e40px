@@ -234,7 +234,7 @@ module cv32e40px_apu_disp (
   // Assertions
   //
 
-`ifdef CV32E40P_ASSERT_ON
+`ifdef CV32E40PX_ASSERT_ON
   assert property (@(posedge clk_i) (apu_rvalid_i) |-> (valid_req | valid_inflight | valid_waiting))
   else $warning("[APU Dispatcher] instruction returned while no instruction is in-flight");
 `endif
