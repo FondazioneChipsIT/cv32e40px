@@ -1811,6 +1811,11 @@ insn_trace_t trace_if, trace_id, trace_ex, trace_ex_next, trace_wb;
           `CSR_FROM_PIPE(id, mstatus)
           if(!s_dont_override_mstatus_fs_id) begin
               `CSR_FROM_PIPE(id, mstatus_fs)
+          end else if (r_pipe_freeze_trace.csr.we && r_pipe_freeze_trace.csr.mstatus_fs_we) begin
+              // An older FP load set FS first: rdata keeps its value, the row takes its own write.
+              trace_id.m_csr.mstatus_fs_we    = 1'b1;
+              trace_id.m_csr.mstatus_fs_wdata = r_pipe_freeze_trace.csr.mstatus_fs_n;
+              trace_id.m_csr.mstatus_fs_wmask = '1;
           end
           `CSR_FROM_PIPE(id, mepc)
           `CSR_FROM_PIPE(id, mcause)
