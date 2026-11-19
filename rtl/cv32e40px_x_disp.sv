@@ -103,8 +103,8 @@ module cv32e40px_x_disp
   logic [31:0] scoreboard_q, scoreboard_d;
   logic [3:0] id_q, id_d;
   logic [15:0] pending_d, pending_q;
+  logic [15:0] pending_mem_d, pending_mem_q;
   logic instr_offloaded_q, instr_offloaded_d;
-  logic [3:0] mem_counter_q, mem_counter_d;
   logic dep;
   logic outstanding_mem;
   logic x_if_not_ready;
@@ -165,7 +165,7 @@ module cv32e40px_x_disp
   // core stall signal
   assign x_stall_o = dep | outstanding_mem | x_if_not_ready | x_if_memory_instr | illegal_forwarding_prevention | pending_q[id_q];
 
-  assign outstanding_mem = data_req_dec_i & (mem_counter_q != '0);
+  assign outstanding_mem = data_req_dec_i & (pending_mem_q != '0);
   assign x_if_memory_instr = x_mem_data_req_o & ~(x_issue_valid_o & x_issue_ready_i);
   assign x_if_not_ready = x_issue_valid_o & ~x_issue_ready_i;
 
@@ -265,14 +265,14 @@ module cv32e40px_x_disp
       instr_offloaded_q <= 1'b0;
       id_q              <= '0;
       pending_q         <= '0;
-      mem_counter_q     <= '0;
+      pending_mem_q     <= '0;
       x_illegal_insn_q  <= 1'b0;
     end else begin
       scoreboard_q      <= scoreboard_d;
       instr_offloaded_q <= instr_offloaded_d;
       id_q              <= id_d;
       pending_q         <= pending_d;
-      mem_counter_q     <= mem_counter_d;
+      pending_mem_q     <= pending_mem_d;
       if (x_control_illegal_reset_i) begin
         x_illegal_insn_q <= 1'b0;
       end else begin
@@ -281,24 +281,19 @@ module cv32e40px_x_disp
     end
   end
 
-
-  always_comb begin
-    mem_counter_d = mem_counter_q;
-    if ((x_issue_valid_o & x_issue_ready_i & x_issue_resp_loadstore_i) & ~(x_mem_valid_i & x_mem_ready_o) ) begin
-      mem_counter_d = mem_counter_q + 4'b0001;
-    end else if (~(x_issue_valid_o & x_issue_ready_i & x_issue_resp_loadstore_i) & (x_mem_valid_i & x_mem_ready_o)) begin
-      mem_counter_d = mem_counter_q - 4'b0001;
-    end
-  end
-
   always_comb begin : pending_intructions_ids
     pending_d = pending_q;
+    pending_mem_d = pending_mem_q;
 
-    if (x_issue_valid_o & x_issue_ready_i)
+    if (x_issue_valid_o & x_issue_ready_i && x_issue_resp_accept_i) begin
       pending_d[id_q] = 1'b1;
+      pending_mem_d[id_q] = x_issue_resp_loadstore_i;
+    end
 
-    if (x_result_valid_i & x_result_ready_o)
+    if (x_result_valid_i & x_result_ready_o) begin
       pending_d[x_result_id_i] = '0;
+      pending_mem_d[x_result_id_i] = '0;
+    end
   end
 
 endmodule : cv32e40px_x_disp
